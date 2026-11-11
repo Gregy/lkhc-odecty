@@ -1,0 +1,20 @@
+{% set _rows = rows if rows is defined else recent %}
+<div class="table-wrap">
+  <table class="data compact">
+    <thead><tr><th scope="col">Kdy</th><th scope="col">Kdo</th><th scope="col">Akce</th><th scope="col">Objekt</th><th scope="col">Změny</th><th scope="col">Poznámka</th></tr></thead>
+    <tbody>
+      {% for e in _rows %}
+      <tr>
+        <td class="nowrap">{{ e.at|datetime_cs }}</td>
+        <td>{{ e.user_email or '–' }}</td>
+        <td>{{ {'create': 'vytvoření', 'update': 'změna', 'delete': 'smazání', 'finalize': 'finalizace', 'reopen': 'znovuotevření', 'import': 'import'}.get(e.action, e.action) }}</td>
+        <td class="nowrap"><a href="/sprava/audit?typ={{ e.entity_type }}{% if e.entity_id %}&amp;id={{ e.entity_id }}{% endif %}">{{ ENTITY_LABELS.get(e.entity_type, e.entity_type) }}{% if e.entity_id %} #{{ e.entity_id }}{% endif %}</a></td>
+        <td class="wrap"><pre class="audit-changes">{{ fmt_changes(e) if fmt_changes is defined else '' }}</pre></td>
+        <td class="wrap small">{{ e.note }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Žádné záznamy.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

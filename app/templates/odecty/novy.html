@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{{ ui.page_header('Nový odečet', 'Pro libovolný elektroměr a skutečné datum odečtu – např. stav, který později poslal nájemce.') }}
+<form method="post" action="/odecty/novy" class="card narrow-form">
+  {{ ui.csrf_field() }}
+  {% for e in errors %}<div class="alert alert-error">{{ e }}</div>{% endfor %}
+  <div class="field">
+    <label for="f-meter_id">Elektroměr <span class="req" aria-hidden="true">*</span></label>
+    <select id="f-meter_id" name="meter_id" required>
+      <option value="">— vyberte —</option>
+      {% for m in meters %}<option value="{{ m.id }}"{% if form.meter_id|string == m.id|string %} selected{% endif %}>{{ m.label }} ({{ m.registers|join('/') }})</option>{% endfor %}
+    </select>
+  </div>
+  {{ ui.field('den', 'Datum odečtu (skutečné, ne dnešní)', form.den, 'date', required=true) }}
+  <div class="grid-2">
+    {{ ui.field('T1', 'T1 (kWh)', form.T1, 'text', attrs={'inputmode': 'decimal', 'autocomplete': 'off'}) }}
+    {{ ui.field('T2', 'T2 (kWh) – jen u dvoutarifních', form.T2, 'text', attrs={'inputmode': 'decimal', 'autocomplete': 'off'}) }}
+  </div>
+  {% for reg, iss in issues.items() %}{% for i in iss %}
+  <label class="ack ack-{{ i.severity }}"><input type="checkbox" name="ack" value="{{ i.code }}"{% if i.code in acks %} checked{% endif %}>
+    <span><strong>{{ reg }}:</strong> {{ i.message }}{% if i.link %} <a href="{{ i.link }}" target="_blank" rel="noopener">{{ i.link_label or 'Nastavení elektroměru' }}</a>{% endif %} <em>Potvrzuji, že hodnota je správně.</em></span></label>
+  {% endfor %}{% endfor %}
+  {{ ui.field('reported_by', 'Nahlásil', form.reported_by, help='např. „Novák (SMS)“ – nechte prázdné u vlastního odečtu') }}
+  {{ ui.field('note', 'Poznámka', form.note) }}
+  <div class="rc-actions"><button class="btn btn-primary" type="submit">Uložit odečet</button> <a class="btn" href="/odecty">Zpět</a></div>
+</form>
+{% endblock %}

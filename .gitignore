@@ -1,0 +1,29 @@
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# Local data & secrets
+data/
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+
+# Private example photos (large, personal data) – never commit
+examples/
+
+# Installation-specific private data (original spreadsheet, import mapping, eval truth, notes);
+# location overridable with LKHC_PRIVATE_DIR / --private-dir – never commit
+private/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

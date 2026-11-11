@@ -1,0 +1,26 @@
+{#- Shared admin form macros. Import WITH CONTEXT. -#}
+{% import "_macros.html" as ui with context %}
+
+{% macro meter_fields(m=none, prefix='', sources=[], hide_dates=false) -%}
+<div class="form-grid">
+  {{ ui.field(prefix ~ 'serial', 'Výrobní číslo', m.serial if m else '', required=true) }}
+  <div class="field">
+    <span class="field-label strong small">Registry</span>
+    <div class="actions">
+      {% set regs = (m.registers if m and m.registers else ['T1']) %}
+      <label class="field-check"><input type="checkbox" name="{{ prefix }}reg_T1" value="1"{% if 'T1' in regs %} checked{% endif %}> T1 (VT)</label>
+      <label class="field-check"><input type="checkbox" name="{{ prefix }}reg_T2" value="1"{% if 'T2' in regs %} checked{% endif %}> T2 (NT)</label>
+    </div>
+  </div>
+  {{ ui.field(prefix ~ 'digits', 'Počet celých míst počitadla', m.digits if m else 5, type='number', help='Přetečení počitadla: modulo 10^míst (např. 5 → 100000).', attrs={'min': 1, 'max': 12, 'step': 1, 'inputmode': 'numeric'}) }}
+  {{ ui.field(prefix ~ 'decimals_shown', 'Desetinná místa na displeji', m.decimals_shown if m else 0, type='number', help='Kolik desetin displej ukazuje (pro čtení a kontrolu řádu).', attrs={'min': 0, 'max': 3, 'step': 1, 'inputmode': 'numeric'}) }}
+  {% if not hide_dates %}
+  {{ ui.field(prefix ~ 'installed_on', 'Instalován', m.installed_on.isoformat() if m and m.installed_on else '', type='date') }}
+  {{ ui.field(prefix ~ 'removed_on', 'Odebrán', m.removed_on.isoformat() if m and m.removed_on else '', type='date', help='Vyplňte při vyřazení bez náhrady; výměnu zadejte formulářem „Výměna elektroměru“.') }}
+  {% endif %}
+  {{ ui.select(prefix ~ 'source_type', 'Zdroj odečtů', [('manual', 'ruční odečet (obchůzka, fotky)'), ('live', 'dálkový odečet (live)')], m.source_type if m else 'manual') }}
+  {{ ui.field(prefix ~ 'source_config', 'Konfigurace zdroje (JSON)', (m.source_config|tojson|forceescape) if m and m.source_config else '', help='Jen pro live zdroje, např. {"kind": "…"}. Registrované typy: ' ~ (sources|join(', ') if sources else 'žádné (zatím se neimplementuje)') ~ '.') }}
+  <div class="span-2">{{ ui.textarea(prefix ~ 'display_note', 'Nápověda ke čtení displeje', m.display_note if m else '', rows=2, help='Např. „displej cykluje T1/T2, OBIS 1.8.1 = T1“ – pomáhá extrakci z fotek.') }}</div>
+  <div class="span-2">{{ ui.textarea(prefix ~ 'note', 'Poznámka', m.note if m else '', rows=2) }}</div>
+</div>
+{%- endmacro %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block content %}
+{% call ui.page_header("Měřicí místa", "v pořadí obchůzky") %}
+  {% if current_user.is_admin %}<a class="btn" href="/sprava/mista">Spravovat</a>{% endif %}
+{% endcall %}
+{{ rm.freshness(cov, today) }}
+<div class="table-wrap">
+  <table class="data sticky-first">
+    <thead>
+      <tr>
+        <th scope="col">Místo</th>
+        <th scope="col">Role</th>
+        <th scope="col">Nájemce</th>
+        <th scope="col">Elektroměr</th>
+        <th scope="col">Zdroj</th>
+        <th scope="col">Poslední odečet</th>
+        <th scope="col" class="num">Dní</th>
+        <th scope="col" class="num">{% if cov.last_month %}{{ cov.last_month[0].month }}/{{ cov.last_month[0].year }} kWh{% else %}kWh{% endif %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      {% set p = r.point %}
+      <tr{% if not p.active %} class="muted"{% endif %}>
+        <th scope="row"><a href="/mista/{{ p.id }}">{{ p.name }}</a>{% if not p.active %} <span class="badge badge-muted">neaktivní</span>{% endif %}</th>
+        <td>{{ ROLE_LABELS.get(p.role, p.role) }}</td>
+        <td>{% for t in r.tenants %}{{ ui.tenant(t) }}{% if not loop.last %}, {% endif %}{% else %}<span class="muted">{{ '–' if p.role != 'sub' else 'nealokováno (→ zbytek)' }}</span>{% endfor %}</td>
+        <td>{% for m in r.active_meters %}{{ m.serial }} <span class="muted small">{{ m.registers|join('/') }}</span>{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">žádný aktivní</span>{% endfor %}
+          {% if r.meters|length > r.active_meters|length %}<br><span class="badge badge-muted" title="Vyměněné / vyřazené elektroměry">+{{ r.meters|length - r.active_meters|length }} vyřaz.</span>{% endif %}</td>
+        <td>{% for m in r.active_meters %}{% if m.source_type == 'live' %}{{ ui.badge('dálkově', 'info') }}{% else %}<span class="small muted">ručně</span>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+        <td>{% if r.stale and r.stale.staleness.last %}{{ r.stale.staleness.last.taken_at|date_cs }}{% else %}–{% endif %}</td>
+        <td class="num">{% if r.stale and r.stale.staleness.days_since is not none %}
+          {%- if r.stale.staleness.overdue %}<span class="badge badge-warning" title="Obvykle ~{{ r.stale.staleness.usual_interval_days|num }} dní">{{ r.stale.staleness.days_since|num }}</span>{% else %}{{ r.stale.staleness.days_since|num }}{% endif -%}
+        {% else %}–{% endif %}</td>
+        <td class="num">{{ r.last_month|qvalue if r.last_month is not none else '–' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{{ rm.quality_legend("Sloupec kWh = poslední měsíc pokrytý odečty hlavního elektroměru (T1+T2).") }}
+{% endblock %}
+{% block scripts %}{{ rm.reports_scripts() }}{% endblock %}

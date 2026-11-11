@@ -1,0 +1,8 @@
+# Before DNS points to this VPS: certificates from Caddy's own CA, Let's Encrypt is never contacted
+# (failed ACME attempts count towards its rate limits). Browsers will warn - only for testing.
+#   on:  cp pre-dns.caddy.example pre-dns.caddy && /srv/proxy/reload.sh
+#   off: (the internal certificate stays in use after a reload, so remove it and restart)
+#        rm pre-dns.caddy
+#        cd /srv/proxy && docker compose exec caddy rm -rf /data/caddy/certificates/local
+#        docker compose restart caddy
+local_certs

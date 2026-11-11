@@ -1,0 +1,9 @@
+# Let's Encrypt STAGING (untrusted certificates, generous rate limits): prove that issuance works
+# after DNS changes, then switch to production.
+#   on:  cp acme-staging.caddy.example acme-staging.caddy && /srv/proxy/reload.sh
+#        docker compose -f /srv/proxy/compose.yml logs caddy | grep 'certificate obtained'
+#   off: a still-valid staging certificate stays in use after a reload, so remove it and restart:
+#        rm acme-staging.caddy
+#        cd /srv/proxy && docker compose exec caddy rm -rf /data/caddy/certificates/acme-staging-v02.api.letsencrypt.org-directory
+#        docker compose restart caddy
+acme_ca https://acme-staging-v02.api.letsencrypt.org/directory

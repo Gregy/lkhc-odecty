@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{% call ui.page_header(point.name, ROLE_LABELS.get(point.role, point.role) ~ ' měřicí místo' ~ (' · ' ~ point.description if point.description else '')) %}
+  <a class="btn" href="/mista">Všechna místa</a>
+  {% if current_user.is_admin %}<a class="btn" href="/sprava/mista/{{ point.id }}">Upravit</a>{% endif %}
+{% endcall %}
+
+<div class="grid grid-2">
+  <section class="card">
+    <h2 class="card-title">Údaje</h2>
+    <dl class="kv">
+      <dt>Role</dt><dd>{{ ROLE_LABELS.get(point.role, point.role) }}{% if not point.active %} {{ ui.badge('neaktivní', 'muted') }}{% endif %}</dd>
+      <dt>Pořadí v obchůzce</dt><dd>{{ point.sort_order }}</dd>
+      {% if parent %}<dt>Nadřazený (kontrolní)</dt><dd><a href="/mista/{{ parent.id }}">{{ parent.name }}</a></dd>{% endif %}
+      {% if children %}<dt>Podřízená místa</dt><dd>{% for c in children %}<a href="/mista/{{ c.id }}">{{ c.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+      <dt>Nájemce</dt>
+      <dd>
+        {% for a in allocations %}
+          {% set t = tenants_by_id.get(a.tenant_id) %}
+          {% if t %}<a href="/najemci/{{ t.id }}">{{ ui.tenant(t) }}</a>{% endif %}
+          {% if a.factor != 1 %} × {{ a.factor|num(3) }}{% endif %}
+          {% if a.valid_from or a.valid_to %}<span class="muted small">({{ ('od ' ~ a.valid_from|date_cs) if a.valid_from }} {{ ('do ' ~ a.valid_to|date_cs) if a.valid_to }})</span>{% endif %}
+          {% if not loop.last %}<br>{% endif %}
+        {% else %}<span class="muted">{{ 'nealokováno – spotřeba spadá do zbytku' if point.role == 'sub' else '–' }}</span>{% endfor %}
+      </dd>
+      {% if point.note %}<dt>Poznámka</dt><dd>{{ point.note }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2 class="card-title">Stav</h2>
+    {% for s in stale %}
+      <p>
+        <strong>{{ s.meter.serial }} {{ s.register }}</strong>:
+        poslední odečet {{ s.staleness.last.taken_at|date_cs if s.staleness.last else 'nikdy' }}
+        {% if s.staleness.days_since is not none %}({{ s.staleness.days_since|num }} dní, obvykle ~{{ s.staleness.usual_interval_days|num }}){% endif %}
+        {% if s.staleness.overdue %}{{ ui.badge('chybí odečet', 'warning') }}{% endif %}
+      </p>
+    {% else %}<p class="muted">Žádný aktivní elektroměr.</p>{% endfor %}
+    {% if anomalies %}
+    <h3>Anomálie</h3>
+    <ul class="issues">
+      {% for a in anomalies[:10] %}<li>{{ a.anomaly.curr.taken_at|date_cs }} – {{ a.meter.serial }} {{ a.register }}: {{ a.anomaly.message }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2 class="card-title">Elektroměry{% if replacements %} a výměny{% endif %}</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr>
+        <th scope="col">Výr. číslo</th><th scope="col">Registry</th><th scope="col">Instalován</th><th scope="col">Odebrán</th>
+        <th scope="col" class="num">Míst</th><th scope="col" class="num">Desetin</th><th scope="col">Zdroj</th><th scope="col">Poznámka</th>
+      </tr></thead>
+      <tbody>
+        {% for m in meters %}
+        <tr{% if m.removed_on %} class="muted"{% endif %}>
+          <td class="strong">{{ m.serial }}</td>
+          <td>{{ (m.registers or ['T1'])|join(' / ') }}</td>
+          <td>{{ m.installed_on|date_cs if m.installed_on else '–' }}</td>
+          <td>{{ m.removed_on|date_cs if m.removed_on else '–' }}</td>
+          <td class="num">{{ m.digits }}</td>
+          <td class="num">{{ m.decimals_shown }}</td>
+          <td>{% if m.source_type == 'live' %}{{ ui.badge('dálkový odečet', 'info') }}{% else %}{{ ui.badge('ruční odečet', 'muted') }}{% endif %}</td>
+          <td class="wrap small">{{ m.note }}{% if m.display_note %}<br><span class="muted">Displej: {{ m.display_note }}</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if replacements %}
+  <ul class="issues">
+    {% for r in replacements %}
+    <li>Výměna {{ r.date|date_cs if r.date else '(datum neznámé)' }}: {{ r.old.serial }} → <strong>{{ r.new.serial }}</strong>. Spotřeba místa se sčítá přes oba elektroměry.</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+{% if monthly_json %}
+<section class="card">
+  <h2 class="card-title">Měsíční spotřeba</h2>
+  <div class="chart-box"><canvas id="chart-point-monthly" role="img" aria-label="Sloupcový graf měsíční spotřeby místa {{ point.name }} po tarifech; hodnoty jsou v tabulce níže."></canvas></div>
+  <div class="chart-legend" id="chart-point-monthly-legend"></div>
+  <p class="muted small">Zarovnané kalendářní měsíce (kWh). Šrafovaný sloupec = předběžná hodnota (chybí pozdější odečet).</p>
+  <script type="application/json" id="chart-point-monthly-data">{{ monthly_json }}</script>
+  <details>
+    <summary>Tabulka po měsících</summary>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th scope="col">Měsíc</th>{% for reg in registers %}<th scope="col" class="num">{{ reg }}</th>{% endfor %}{% if registers|length > 1 %}<th scope="col" class="num">Celkem</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for r in month_rows %}
+          <tr><th scope="row">{{ r.label }}</th>{% for reg in registers %}<td class="num">{{ r.regs[reg]|qvalue }}</td>{% endfor %}{% if registers|length > 1 %}<td class="num strong">{{ r.total|qvalue }}</td>{% endif %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {{ rm.quality_legend() }}
+  </details>
+</section>
+{% endif %}
+
+{% if has_states %}
+<section class="card">
+  <h2 class="card-title">Stav počitadla</h2>
+  {% for reg in registers %}
+  {% if registers|length > 1 %}<h3>{{ reg }}</h3>{% endif %}
+  <div class="chart-box"><canvas id="chart-point-states-{{ reg }}" role="img" aria-label="Spojnicový graf stavu počitadla {{ reg }} místa {{ point.name }} v čase; hodnoty jsou v historii odečtů níže."></canvas></div>
+  <div class="chart-legend" id="chart-point-states-{{ reg }}-legend"></div>
+  {% endfor %}
+  <p class="muted small">Body = potvrzené odečty, každý elektroměr má vlastní čáru (výměna = nová čára). Přetečení počitadla se projeví skokem dolů.</p>
+  <script type="application/json" id="chart-point-states-data">{{ state_json }}</script>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">Historie odečtů</h2>
+  {% if history %}
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr>
+        <th scope="col">Datum</th>
+        {% if meters|length > 1 %}<th scope="col">Elektroměr</th>{% endif %}
+        {% for reg in registers %}<th scope="col" class="num">{{ reg }}</th><th scope="col" class="num muted">Δ {{ reg }}</th>{% endfor %}
+        <th scope="col">Zdroj</th><th scope="col">Poznámka</th>
+      </tr></thead>
+      <tbody>
+        {% for g in history %}
+        <tr>
+          <td class="nowrap">{{ g.taken_at|date_cs }}</td>
+          {% if meters|length > 1 %}<td>{{ g.meter.serial }}</td>{% endif %}
+          {% for reg in registers %}
+            {% set c = g.regs.get(reg) %}
+            {% if c %}
+            <td class="num{% if c.r.status == 'pending' %} muted{% endif %}">{{ c.r.value|num([g.meter.decimals_shown, c.r.value|decimals]|max) }}{% if c.r.status == 'pending' %} {{ ui.badge('nepotvrzeno', 'warning') }}{% endif %}</td>
+            <td class="num muted">{% if c.delta %}{% if c.delta.anomaly %}<span class="negative" title="Anomálie: {{ c.delta.anomaly }}">{{ c.delta.value|num(g.meter.decimals_shown) }} !</span>{% else %}{{ c.delta.value|num(g.meter.decimals_shown) }}{% if c.delta.rollover %} <span title="Přetečení počitadla">↻</span>{% endif %}{% endif %}{% endif %}</td>
+            {% else %}<td class="num muted">–</td><td></td>{% endif %}
+          {% endfor %}
+          <td>
+            {% set srcs = [] %}{% for reg, c in g.regs.items() %}{% if c.r.source not in srcs %}{% set _ = srcs.append(c.r.source) %}{% endif %}{% endfor %}
+            {% for s in srcs %}{{ ui.source_badge(s) }} {% endfor %}
+            {% set ph = g.regs.values()|map(attribute='r')|selectattr('photo_id')|first %}
+            {% if ph %}<a href="/fotky/{{ ph.photo_id }}" class="history-thumb" title="Fotka #{{ ph.photo_id }}"><img src="/fotky/{{ ph.photo_id }}/nahled" alt="fotka" loading="lazy" width="40" height="40"></a>{% endif %}
+          </td>
+          <td class="wrap small">{{ g.notes|join('; ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">Δ = rozdíl proti předchozímu potvrzenému odečtu téhož elektroměru (↻ přetečení počitadla). Úpravy odečtů: <a href="/odecty">Odečty</a>.</p>
+  {% else %}<p class="muted">Zatím žádné odečty.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Fotky</h2>
+  {% if photos %}
+  <div class="thumb-grid">
+    {% for ph in photos %}
+    <a href="/fotky/{{ ph.id }}" class="thumb thumb-{{ ph.review_status }}">
+      <img src="/fotky/{{ ph.id }}/nahled" alt="Fotka #{{ ph.id }}" loading="lazy">
+      <span class="small"><strong>#{{ ph.id }}</strong> {{ ph.taken_at|datetime_cs if ph.taken_at else 'bez data' }}</span>
+      {% if ph.review_status == 'new' %}<span class="small">{{ ui.badge('ke kontrole', 'warning') }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">K tomuto místu nejsou přiřazené žádné fotky.</p>{% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+{{ rm.chart_scripts() }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (!window.LKHCCharts) return;
+  LKHCCharts.registerBars("chart-point-monthly", "chart-point-monthly-data", "chart-point-monthly-legend");
+  {% for reg in registers %}LKHCCharts.stateLines("chart-point-states-{{ reg }}", "chart-point-states-data", "chart-point-states-{{ reg }}-legend", {{ reg|tojson }});
+  {% endfor %}
+});
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block content %}
+{% call ui.page_header("Nájemci", ("spotřeba od 1. 1. " ~ year ~ " do " ~ cov.end|date_cs) if year else "") %}
+  {% if current_user.is_admin %}<a class="btn" href="/sprava/najemci">Spravovat</a>{% endif %}
+{% endcall %}
+<div class="table-wrap">
+  <table class="data sticky-first">
+    <thead>
+      <tr>
+        <th scope="col">Nájemce</th>
+        <th scope="col">Měřicí místa</th>
+        <th scope="col" class="num group-start">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Celkem</th>
+        <th scope="col" class="num group-start">Loni stejné období</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <th scope="row"><a href="/najemci/{{ r.tenant.id }}">{{ ui.tenant(r.tenant) }}</a></th>
+        <td class="wrap small">{% if r.tenant.is_remainder %}<span class="muted">zbytek: hlavní elektroměr − ostatní</span>{% else %}{% for p in r.points %}<a href="/mista/{{ p.id }}">{{ p.name }}</a>{% if not loop.last %}, {% endif %}{% else %}<span class="muted">–</span>{% endfor %}{% endif %}</td>
+        {% if r.ytd %}
+        <td class="num group-start">{{ r.ytd.T1|qvalue }}</td><td class="num">{{ r.ytd.T2|qvalue }}</td><td class="num strong">{{ r.ytd.total|qvalue }}</td>
+        {% else %}<td class="num group-start">–</td><td class="num">–</td><td class="num">–</td>{% endif %}
+        <td class="num group-start">{{ r.prev|qvalue if r.prev else '–' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{{ rm.quality_legend("kWh, zarovnané kalendářní měsíce.") }}
+{% endblock %}
+{% block scripts %}{{ rm.reports_scripts() }}{% endblock %}

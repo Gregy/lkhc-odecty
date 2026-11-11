@@ -1,0 +1,59 @@
+# Shared reverse proxy for every app on this host. Lives in /srv/proxy (its own compose project).
+#
+#   /srv/proxy/compose.yml          this file
+#   /srv/proxy/.env                 ACME_EMAIL, LKHC_ODECTY_HOST (copy of env.example)
+#   /srv/proxy/caddy/Caddyfile      global options + `import sites/*.caddy`
+#   /srv/proxy/caddy/sites/*.caddy  one small file per site/app
+#   /srv/proxy/reload.sh            validate + reload after changing a site file
+#
+# Apps are separate compose projects in /srv/<app>/ that join the external network "proxy"
+# (created once: see bootstrap-host.sh) and publish NO host ports. Caddy reaches them by a
+# network alias, e.g. `reverse_proxy lkhc-odecty:8000`. Host names come from .env, not from here.
+#
+# This is the only container that publishes ports. The Docker daemon is configured with
+# "ip": "127.0.0.1" (bootstrap-host.sh), so a port published without an explicit address
+# anywhere else ends up on localhost only; that is why the addresses below are spelled out.
+
+name: proxy
+
+services:
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
+      - "[::]:80:80"
+      - "0.0.0.0:443:443"
+      - "[::]:443:443"
+      - "0.0.0.0:443:443/udp" # HTTP/3 (optional; harmless if UDP is filtered somewhere)
+      - "[::]:443:443/udp"
+    env_file: .env
+    volumes:
+      # A directory, not single files: editors replace files by renaming, which a single-file bind
+      # mount would not see.
+      - ./caddy:/etc/caddy:ro
+      - caddy-data:/data # certificates + ACME account key - keep this volume
+      - caddy-config:/config
+    networks:
+      proxy:
+        # Fixed address so apps can trust X-Forwarded-* from exactly this IP (FORWARDED_ALLOW_IPS).
+        ipv4_address: 10.250.0.2
+    mem_limit: 128m # idles at ~15-30 MB
+    pids_limit: 512
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+networks:
+  proxy:
+    # docker network create --subnet 10.250.0.0/24 --ip-range 10.250.0.128/25 proxy (bootstrap-host.sh);
+    # the --ip-range keeps 10.250.0.2 free for Caddy, whatever starts first after a reboot.
+    external: true

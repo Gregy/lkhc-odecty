@@ -1,0 +1,30 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<div class="table-wrap">
+  <table class="data">
+    <thead><tr><th scope="col">Nájemce</th><th scope="col" class="num">Pořadí</th><th scope="col">Zbytek</th><th scope="col">Stav</th><th scope="col" class="num">Alokací</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for t in tenants %}
+      <tr>
+        <th scope="row">{{ ui.tenant(t) }}</th>
+        <td class="num">{{ t.sort_order }}</td>
+        <td>{{ 'ano' if t.is_remainder else '' }}</td>
+        <td>{{ 'aktivní' if t.active else 'neaktivní' }}</td>
+        <td class="num">{{ n_alloc.get(t.id, 0) }}</td>
+        <td><a href="/sprava/najemci/{{ t.id }}">Upravit</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<details class="card">
+  <summary><strong>Nový nájemce</strong></summary>
+  <form method="post" action="/sprava/najemci">
+    {{ ui.csrf_field() }}
+    {% set t = none %}
+    {% include "sprava/_tenant_form.html" %}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Vytvořit</button></div>
+  </form>
+</details>
+{% endblock %}

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}{{ page_title ~ ' · ' if page_title }}LKHC Odečty{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  {#- Stable tenant colours: CSS variables --tenant-<id> (light/dark) + JSON for charts (lkhc.tenantColors()). #}
+  <style>
+    :root { {% for t in tenant_palette %}--tenant-{{ t.id }}: {{ t.light }}; {% endfor %} }
+    @media (prefers-color-scheme: dark) {
+      :root { {% for t in tenant_palette %}--tenant-{{ t.id }}: {{ t.dark }}; {% endfor %} }
+    }
+  </style>
+  <script type="application/json" id="tenant-colors">{{ tenant_palette_json }}</script>
+  <script src="{{ url_for('static', path='vendor/htmx-2.0.4.min.js') }}" defer></script>
+  <script src="{{ url_for('static', path='js/app.js') }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/alpinejs-3.14.8.min.js') }}" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}' class="{% block body_class %}{% endblock %}">
+  <a class="skip-link" href="#main">Přeskočit na obsah</a>
+  <header class="topbar" x-data="{ open: false }">
+    <div class="topbar-inner">
+      <a class="brand" href="/">LKHC <span>Odečty</span></a>
+      {% if current_user %}
+      <button class="nav-toggle" type="button" @click="open = !open" :aria-expanded="open.toString()" aria-controls="main-nav">
+        <span aria-hidden="true">☰</span><span class="sr-only">Menu</span>
+      </button>
+      {% endif %}
+    </div>
+    {% if current_user %}
+    <nav id="main-nav" class="mainnav" :class="{ 'open': open }" aria-label="Hlavní navigace">
+      <ul>
+        {% for label, url in nav %}
+        <li><a href="{{ url }}" {% if active_nav == url %}aria-current="page"{% endif %}>{{ label }}</a></li>
+        {% endfor %}
+      </ul>
+      <div class="userbox">
+        <span class="user" title="{{ current_user.email }}">{{ current_user.display_name }}
+          {% if current_user.is_admin %}<span class="badge badge-info">admin</span>{% else %}<span class="badge">čtenář</span>{% endif %}
+        </span>
+        <form method="post" action="/logout" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-link">Odhlásit</button>
+        </form>
+      </div>
+    </nav>
+    {% endif %}
+  </header>
+
+  {% if settings and settings.auth_dev_bypass %}
+  <div class="devbar" role="status">Vývojový režim: AUTH_DEV_BYPASS je zapnutý.</div>
+  {% endif %}
+
+  <main id="main" class="container">
+    {% if flashes %}
+    <div class="flashes" aria-live="polite">
+      {% for category, message in flashes %}
+      <div class="flash flash-{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">
+        <span>{{ message }}</span>
+        <button type="button" class="flash-close" aria-label="Zavřít" data-dismiss>&times;</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

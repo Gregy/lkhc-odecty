@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#1f5fa8">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Obchůzka · LKHC Odečty</title>
+  <link rel="manifest" href="/obchuzka/manifest.webmanifest">
+  <link rel="icon" href="{{ url_for('static', path='obchuzka/icon-192.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', path='obchuzka/icon-192.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">
+  <script src="{{ url_for('static', path='obchuzka/app.js') }}" defer></script>
+</head>
+<body class="walk" data-user="{{ current_user.display_name }}" data-admin="{{ '1' if current_user.is_admin else '0' }}" data-version="{{ app_version }}">
+  <header class="walk-top">
+    <a class="brand" href="#/">LKHC <span>Obchůzka</span></a>
+    <span class="net" data-net></span>
+    <span class="spacer"></span>
+    <button type="button" class="queue-pill" data-queue-pill onclick="location.hash='#/fronta'">Fronta: –</button>
+    <a href="/odecty" class="btn-link small" title="Zpět do aplikace">Aplikace</a>
+  </header>
+  <main class="walk-main" id="app" aria-live="polite">
+    <noscript><div class="alert alert-error">Obchůzka potřebuje zapnutý JavaScript.</div></noscript>
+    <p class="muted">Načítám…</p>
+  </main>
+</body>
+</html>

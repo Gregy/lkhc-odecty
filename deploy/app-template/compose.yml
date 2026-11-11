@@ -1,0 +1,27 @@
+# Template for another app on the same VPS. Copy to /srv/<app>/compose.yml and adapt.
+# Rules: own compose project, joins the external network "proxy", NO `ports:`, a unique network
+# alias (Caddy uses it), memory limit. Then add /srv/proxy/caddy/sites/<host>.caddy (site.caddy).
+name: myapp
+
+services:
+  web:
+    image: nginx:1.29-alpine # your app's image
+    restart: unless-stopped
+    # env_file: .env          # secrets: /srv/<app>/.env, mode 0600, owner deploy
+    # volumes:
+    #   - data:/data
+    networks:
+      proxy:
+        aliases: [myapp] # unique on the proxy network: reverse_proxy myapp:<port>
+    mem_limit: 256m
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+
+# volumes:
+#   data:
+#     name: myapp-data
+
+networks:
+  proxy:
+    external: true

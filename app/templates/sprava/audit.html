@@ -1,0 +1,25 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<form class="filters" method="get">
+  <div class="field">
+    <label for="f-typ">Typ objektu</label>
+    <select id="f-typ" name="typ">
+      <option value="">vše</option>
+      {% for t in types %}<option value="{{ t }}"{% if t == entity %} selected{% endif %}>{{ ENTITY_LABELS.get(t, t) }}</option>{% endfor %}
+    </select>
+  </div>
+  {% if entity_id is not none %}<input type="hidden" name="id" value="{{ entity_id }}">{% endif %}
+  <div class="field"><button class="btn" type="submit">Filtrovat</button></div>
+  {% if entity or entity_id is not none %}<div class="field"><a class="btn btn-link" href="/sprava/audit">zrušit filtr</a></div>{% endif %}
+</form>
+<p class="muted small">{{ total }} záznamů{% if entity_id is not none %} pro #{{ entity_id }}{% endif %}.</p>
+{% include "sprava/_audit_table.html" %}
+{% if pages > 1 %}
+<nav class="actions" aria-label="Stránkování">
+  {% if page > 1 %}<a class="btn" href="?typ={{ entity }}{% if entity_id is not none %}&amp;id={{ entity_id }}{% endif %}&amp;strana={{ page - 1 }}">Novější</a>{% endif %}
+  <span class="muted">strana {{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn" href="?typ={{ entity }}{% if entity_id is not none %}&amp;id={{ entity_id }}{% endif %}&amp;strana={{ page + 1 }}">Starší</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

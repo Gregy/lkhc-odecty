@@ -1,0 +1,34 @@
+# /srv/proxy/caddy/Caddyfile - shared by all sites. Per-site config: sites/<host>.caddy.
+# After a change: /srv/proxy/reload.sh  (validates first, then reloads without dropping connections).
+{
+	email {$ACME_EMAIL}
+
+	servers {
+		# Phones upload photos over slow mobile data: allow a slow request body, but not slow
+		# headers (slowloris). `write` counts from the end of the headers until the response is
+		# written, so it must cover reading the body as well.
+		timeouts {
+			read_header 30s
+			read_body 10m
+			write 15m
+			idle 5m
+		}
+		# HTTP/1.1, HTTP/2 and HTTP/3 are on by default (HTTP/3 needs 443/udp, see compose.yml).
+	}
+
+	# Extra global options, normally none: global.d/pre-dns.caddy (Caddy's own CA while DNS is not
+	# ready) or global.d/acme-staging.caddy (Let's Encrypt staging) - see the *.example files there.
+	import global.d/*.caddy
+}
+
+# Common settings for every site; a site file starts with `import common`.
+(common) {
+	encode zstd gzip
+	log {
+		output stdout
+		format json
+	}
+	header -Server
+}
+
+import sites/*.caddy

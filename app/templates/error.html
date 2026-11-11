@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>{{ status_code }} – {{ page_title }}</h1>
+  {% if detail and detail not in ('Not Found', 'Forbidden', 'Method Not Allowed') %}<p>{{ detail }}</p>{% endif %}
+  <p><a href="/">Zpět na přehled</a></p>
+</section>
+{% endblock %}

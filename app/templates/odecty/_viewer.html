@@ -1,0 +1,17 @@
+{#- Fullscreen photo viewer (zoom / rotate / pan), driven by static/js/capture.js.
+    Any element with data-viewer-src="<url>" opens it. -#}
+<dialog class="viewer" id="photo-viewer" aria-label="Prohlížeč fotky">
+  <div class="viewer-bar">
+    <span class="viewer-title" data-viewer-title></span>
+    <span class="viewer-tools">
+      <button type="button" class="btn" data-viewer-act="rotl" title="Otočit doleva" aria-label="Otočit doleva">⟲</button>
+      <button type="button" class="btn" data-viewer-act="rotr" title="Otočit doprava" aria-label="Otočit doprava">⟳</button>
+      <button type="button" class="btn" data-viewer-act="out" title="Oddálit" aria-label="Oddálit">−</button>
+      <button type="button" class="btn" data-viewer-act="in" title="Přiblížit" aria-label="Přiblížit">+</button>
+      <button type="button" class="btn" data-viewer-act="reset" title="Původní velikost">1:1</button>
+      <a class="btn" data-viewer-orig target="_blank" rel="noopener" title="Originál v novém okně">↗</a>
+      <button type="button" class="btn" data-viewer-act="close" aria-label="Zavřít">✕</button>
+    </span>
+  </div>
+  <div class="viewer-stage" data-viewer-stage><img alt="" data-viewer-img draggable="false"></div>
+</dialog>

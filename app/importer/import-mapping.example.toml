@@ -1,0 +1,88 @@
+# Example import mapping (anonymised). The real one is private installation data:
+#   <private dir>/import-mapping.toml   (default ./private, $LKHC_PRIVATE_DIR, --private-dir)
+# Full description of the format: docstring of app/importer/mapping.py.
+# The test suite builds a complete synthetic workbook + mapping in tests/synthetic.py.
+
+# Tenants in display order; exactly one is the remainder (= main meter minus all other tenants).
+# color / color_dark are optional (default: palette slot by position).
+[[tenants]]
+name = "Provozovatel"
+remainder = true
+
+[[tenants]]
+name = "Nájemce A"
+color = "#eb6834"
+color_dark = "#d95926"
+
+[[tenants]]
+name = "Nájemce B"
+
+# One entry per meter column of the sheet: the T1 column letter (T2 is the next column) and the serial
+# expected in row 2 of the sheet (a shifted layout is refused).
+[[columns]]
+col = "B"
+serial = "10000001"
+role = "main"
+note = "Hlavní elektroměr (T1+T2)."
+
+[[columns]]
+col = "D"
+serial = "10000002"
+tenant = "Nájemce A"
+
+# A meter replaced by another one on the same point: the old one ends on its last reading,
+# the new one starts on its first reading.
+[[columns]]
+col = "F"
+serial = "10000003"
+tenant = "Nájemce B"
+removed_on = "last_reading"
+note = "Nahrazen elektroměrem 10000004."
+
+[[columns]]
+col = "H"
+serial = "10000004"
+tenant = "Nájemce B"
+installed_on = "first_reading"
+
+# The same serial twice in the sheet: the second column gets its own DB serial and the same point;
+# the old meter is removed when the new one was installed, the allocation starts then too.
+[[columns]]
+col = "J"
+serial = "10000005"
+point = "Kiosek"
+removed_on = "replacement_install"
+replaced_by = "L"
+
+[[columns]]
+col = "L"
+serial = "10000005"
+point = "Kiosek"
+tenant = "Nájemce A"
+serial_override = "10000005-B"
+installed_on = "first_reading"
+allocation_from = "L"
+note = "OVĚŘIT výrobní číslo."
+
+# Unallocated sub-meter (its consumption stays in the remainder).
+[[columns]]
+col = "N"
+serial = "10000006"
+
+# Control meter and a child meter whose sum it checks.
+[[columns]]
+col = "P"
+serial = "10000007"
+role = "control"
+
+[[columns]]
+col = "R"
+serial = "AB 100X"
+tenant = "Nájemce B"
+parent = "Kontrolní hangáry"
+
+# Confirmed errors of the sheet (only what the data owner confirmed). `--bez-oprav` skips them.
+[[date_corrections]]
+sheet_date = 2025-02-03
+corrected = 2025-03-03
+reason = "překlep v tabulce – potvrdil správce"

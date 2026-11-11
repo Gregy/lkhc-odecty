@@ -1,0 +1,133 @@
+{#-
+  Shared UI macros. Import WITH CONTEXT (csrf_field needs the request's csrf_token):
+    {% import "_macros.html" as ui with context %}
+  Number filters (also usable directly): |num(decimals), |kwh(decimals), |date_cs, |datetime_cs,
+  |qvalue(decimals) for aligned values with quality, |quality_title for tooltips.
+-#}
+
+{# Hidden CSRF field for plain HTML forms (app.js also injects it automatically). #}
+{% macro csrf_field() -%}
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{%- endmacro %}
+
+{# Number in cs-CZ format, right-aligned; None -> "–". #}
+{% macro num(value, decimals=0, cls='') -%}
+<span class="num {{ cls }}{% if value is not none and value < 0 %} negative{% endif %}">{{ value|num(decimals) }}</span>
+{%- endmacro %}
+
+{# kWh with unit. #}
+{% macro kwh(value, decimals=0) -%}
+<span class="num{% if value is not none and value < 0 %} negative{% endif %}">{{ value|kwh(decimals) }}</span>
+{%- endmacro %}
+
+{# Aligned value (QValue) with quality marker (≈ + italics for estimated/provisional) and tooltip. #}
+{% macro qv(value, decimals=0, unit=false) -%}
+{{ value|qvalue(decimals, unit) }}
+{%- endmacro %}
+
+{# Badge. kind: info | success | warning | error | muted #}
+{% macro badge(text, kind='') -%}
+<span class="badge{% if kind %} badge-{{ kind }}{% endif %}">{{ text }}</span>
+{%- endmacro %}
+
+{# Quality badge for a Quality value (exact / estimated / provisional). #}
+{% macro quality_badge(q) -%}
+{%- if q == Quality.EXACT -%}<span class="badge badge-success" title="{{ QUALITY_LABELS[q] }}">přesně</span>
+{%- elif q == Quality.ESTIMATED -%}<span class="badge badge-warning" title="{{ QUALITY_LABELS[q] }}">≈ odhad</span>
+{%- else -%}<span class="badge badge-error" title="{{ QUALITY_LABELS[q] }}">≈? předběžně</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# Source of a reading. #}
+{% macro source_badge(source) -%}
+{%- set labels = {'manual': 'ručně', 'photo': 'foto', 'import': 'import', 'live': 'dálkově'} -%}
+<span class="badge badge-muted">{{ labels.get(source, source) }}</span>
+{%- endmacro %}
+
+{# Coloured dot + name of a tenant (dict from tenant_palette or object with id/name). #}
+{% macro tenant(t) -%}
+<span class="tenant"><span class="tenant-dot" style="background: var(--tenant-{{ t.id }})"></span>{{ t.name }}</span>
+{%- endmacro %}
+
+{#
+  Generic table. headers: list of labels or (label, 'num') tuples; rows: list of lists of cells (HTML-safe
+  values are rendered as is). Wrap wide tables for horizontal scrolling on mobile.
+#}
+{% macro table(headers, rows, caption=none, cls='') -%}
+<div class="table-wrap">
+<table class="data {{ cls }}">
+  {% if caption %}<caption>{{ caption }}</caption>{% endif %}
+  <thead><tr>
+    {% for h in headers %}
+      {% if h is string %}<th scope="col">{{ h }}</th>{% else %}<th scope="col" class="{{ h[1] }}">{{ h[0] }}</th>{% endif %}
+    {% endfor %}
+  </tr></thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+    {% else %}
+    <tr><td colspan="{{ headers|length }}" class="muted">Žádná data.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{%- endmacro %}
+
+{# Form field. type: text | number | date | datetime-local | email | password | ... #}
+{% macro field(name, label, value='', type='text', required=false, help='', error='', attrs={}) -%}
+<div class="field{% if error %} has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}{% if required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+  <input id="f-{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ value if value is not none else '' }}"
+    {%- if required %} required{% endif %}
+    {%- if type == 'number' and 'inputmode' not in attrs %} inputmode="decimal" step="any"{% endif %}
+    {%- for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}
+    {%- if help or error %} aria-describedby="f-{{ name }}-help"{% endif %}>
+  {% if error %}<p class="field-error" id="f-{{ name }}-help">{{ error }}</p>
+  {% elif help %}<p class="field-help" id="f-{{ name }}-help">{{ help }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Select. options: list of (value, label). #}
+{% macro select(name, label, options, selected=none, required=false, help='', error='', attrs={}) -%}
+<div class="field{% if error %} has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}{% if required %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+  <select id="f-{{ name }}" name="{{ name }}"{% if required %} required{% endif %}{% for k, v in attrs.items() %} {{ k }}="{{ v }}"{% endfor %}>
+    {% for value, text in options %}
+    <option value="{{ value }}"{% if selected is not none and value|string == selected|string %} selected{% endif %}>{{ text }}</option>
+    {% endfor %}
+  </select>
+  {% if error %}<p class="field-error">{{ error }}</p>{% elif help %}<p class="field-help">{{ help }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro textarea(name, label, value='', rows=3, help='', error='') -%}
+<div class="field{% if error %} has-error{% endif %}">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <textarea id="f-{{ name }}" name="{{ name }}" rows="{{ rows }}">{{ value or '' }}</textarea>
+  {% if error %}<p class="field-error">{{ error }}</p>{% elif help %}<p class="field-help">{{ help }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro checkbox(name, label, checked=false, value='1') -%}
+<div class="field field-check">
+  <label><input type="checkbox" name="{{ name }}" value="{{ value }}"{% if checked %} checked{% endif %}> {{ label }}</label>
+</div>
+{%- endmacro %}
+
+{# Page header with optional actions slot: {% call ui.page_header('Titulek') %}<a class="btn">…</a>{% endcall %} #}
+{% macro page_header(title, subtitle='') -%}
+<div class="page-header">
+  <div>
+    <h1>{{ title }}</h1>
+    {% if subtitle %}<p class="muted">{{ subtitle }}</p>{% endif %}
+  </div>
+  {% if caller is defined %}<div class="actions">{{ caller() }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Alert box (e.g. for services.alerts output). severity: info | warning | error #}
+{% macro alert_box(message, severity='info', link=none) -%}
+<div class="alert alert-{{ severity }}">
+  <span>{{ message }}</span>{% if link %} <a href="{{ link }}">Detail</a>{% endif %}
+</div>
+{%- endmacro %}

@@ -1,0 +1,126 @@
+{#- Per-tenant protocol rendered from a settlement document (live draft or stored snapshot).
+    Import WITH CONTEXT (needs `dt`, `s`, `doc`, `users`):
+      {% import "vyuctovani/_protocol.html" as proto with context %}{{ proto.protocol(p) }} -#}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+
+{% macro status_line() -%}
+{%- if s.status == 'final' -%}
+  Finalizováno {{ dt(s.finalized_at) }}{% if s.finalized_by_id and users.get(s.finalized_by_id) %} ({{ users[s.finalized_by_id].display_name }}){% endif %}
+  {%- if s.finalize_forced %} – <strong>vynuceně s předběžnými hodnotami</strong>: {{ s.finalize_note }}{% endif %}
+{%- else -%}
+  <strong>NÁVRH</strong> – hodnoty z aktuálních odečtů ke dni {{ dt(doc.generated_at) }}, mohou se ještě změnit
+{%- endif -%}
+{%- endmacro %}
+
+{% macro protocol(p, heading_level=2) %}
+{% set td = p.t %}
+{% set meters = p.meters %}
+<article class="protocol" id="protokol-{{ td.id }}">
+  <h{{ heading_level }}>Protokol o spotřebě elektřiny – {{ ui.tenant(td) }}</h{{ heading_level }}>
+  <div class="protocol-meta">
+    <span>{{ s.name }}</span>
+    <span>Období <strong>{{ dt(doc.start) }} – {{ dt(doc.end) }}</strong></span>
+    <span>{{ status_line() }}</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th scope="col">Spotřeba za období</th><th scope="col" class="num">T1 (VT)</th><th scope="col" class="num">T2 (NT)</th><th scope="col" class="num">Celkem</th><th scope="col">Kvalita</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>{{ td.name }}</strong></th>
+          <td class="num strong">{{ rm.qd(td.totals.T1, 0, true) }}</td>
+          <td class="num strong">{{ rm.qd(td.totals.T2, 0, true) }}</td>
+          <td class="num strong">{{ rm.qd(td.total, 0, true) }}</td>
+          <td>{{ rm.qbadge(td.total.quality, td.total.title) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {% if meters %}
+  <h{{ heading_level + 1 }}>{{ 'Hlavní elektroměr' if td.is_remainder else 'Elektroměry' }}</h{{ heading_level + 1 }}>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr>
+        <th scope="col">Místo</th><th scope="col">Elektroměr</th><th scope="col">Tarif</th>
+        <th scope="col" class="num">Počáteční stav</th><th scope="col" class="num">Konečný stav</th><th scope="col" class="num">Spotřeba kWh</th>
+        <th scope="col">Poznámka</th>
+      </tr></thead>
+      <tbody>
+        {% for m in meters %}
+        <tr>
+          <td>{{ m.point_name }}</td>
+          <td>{{ m.serial }}{% if m.source_type == 'live' %} {{ ui.badge('dálkově', 'info') }}{% endif %}</td>
+          <td>{{ m.register }}</td>
+          <td class="num">{{ rm.state(m.start, m.decimals_shown or 0) }}<br><span class="muted small">{{ dt(m.start.t) }}</span></td>
+          <td class="num">{{ rm.state(m.end, m.decimals_shown or 0) }}<br><span class="muted small">{{ dt(m.end.t) }}</span></td>
+          <td class="num strong">{{ rm.qd(m.consumption) }}</td>
+          <td class="wrap small">
+            {% if m.start.quality != 'exact' %}<div>Počátek: {{ m.start.title }}</div>{% elif m.start.method != 'reading' %}<div class="muted">Počátek: {{ m.start.title }}</div>{% endif %}
+            {% if m.end.quality != 'exact' %}<div>Konec: {{ m.end.title }}</div>{% elif m.end.method != 'reading' %}<div class="muted">Konec: {{ m.end.title }}</div>{% endif %}
+            {% if m.installed_on and m.installed_on|string > doc.start|string %}<div><strong>Nový elektroměr</strong> od {{ dt(m.installed_on) }}</div>{% endif %}
+            {% if m.removed_on and m.removed_on|string < doc.end|string %}<div><strong>Vyměněn / odebrán</strong> {{ dt(m.removed_on) }}</div>{% endif %}
+            {% if m.note %}<div class="muted">{{ m.note }}</div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if td.is_remainder and td.remainder %}
+  <h{{ heading_level + 1 }}>Výpočet zbytku</h{{ heading_level + 1 }}>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th scope="col">Složka</th><th scope="col" class="num">T1</th><th scope="col" class="num">T2</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Hlavní elektroměr</th><td class="num">{{ rm.qd(td.remainder.main.T1) }}</td><td class="num">{{ rm.qd(td.remainder.main.T2) }}</td></tr>
+        {% for o in td.remainder.others %}
+        <tr><th scope="row">− {{ o.name }}</th><td class="num">{{ rm.qd(o['values'].T1) }}</td><td class="num">{{ rm.qd(o['values'].T2) }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><th scope="row">= {{ td.name }}</th><td class="num">{{ rm.qd(td.totals.T1) }}</td><td class="num">{{ rm.qd(td.totals.T2) }}</td></tr></tfoot>
+    </table>
+  </div>
+  {% if td.remainder.unallocated %}
+  <p class="small muted">Ve zbytku je zahrnuta i spotřeba nealokovaných míst:
+    {% for u in td.remainder.unallocated %}{{ u.point_name }} ({{ rm.qd(u['values'].T1) }}{% if (u['values'].T2.value|float) != 0 %} + {{ rm.qd(u['values'].T2) }}{% endif %} kWh){% if not loop.last %}, {% endif %}{% endfor %}.
+  </p>
+  {% endif %}
+  {% elif td.allocations %}
+  <h{{ heading_level + 1 }}>Rozpočet po měřicích místech</h{{ heading_level + 1 }}>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th scope="col">Místo</th><th scope="col" class="num">Koef.</th><th scope="col">Platnost v období</th><th scope="col" class="num">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Celkem</th></tr></thead>
+      <tbody>
+        {% for a in td.allocations %}
+        <tr>
+          <th scope="row">{{ a.point_name }}</th>
+          <td class="num">{{ a.factor|num(3) if (a.factor|float) != 1 else '1' }}</td>
+          <td class="small">{% if a.partial %}{{ dt(a.window[0]) }} – {{ dt(a.window[1]) }}{% else %}celé období{% endif %}</td>
+          <td class="num">{{ rm.qd(a['values'].T1) }}</td><td class="num">{{ rm.qd(a['values'].T2) }}</td><td class="num strong">{{ rm.qd(a.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><th scope="row">= {{ td.name }}</th><td></td><td></td><td class="num">{{ rm.qd(td.totals.T1) }}</td><td class="num">{{ rm.qd(td.totals.T2) }}</td><td class="num">{{ rm.qd(td.total) }}</td></tr></tfoot>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if td.total.quality != 'exact' %}
+  <p class="small"><strong>Kvalita:</strong>
+    {% if td.total.quality == 'provisional' %}obsahuje <strong>předběžné</strong> hodnoty (extrapolace – chybí pozdější odečet), výsledek se ještě změní.
+    {% else %}část stavů na hranicích je <strong>odhadnuta</strong> interpolací mezi skutečnými odečty (viz poznámky u elektroměrů).{% endif %}
+    {% if td.total.estimated_kwh and (td.total.estimated_kwh|float) > 0 %}Odhadnutá část: {{ td.total.estimated_kwh|num }} kWh.{% endif %}
+    {% if td.is_remainder %}Zbytek přebírá kvalitu hlavního elektroměru i všech ostatních nájemců.{% endif %}
+  </p>
+  {% endif %}
+  {{ rm.quality_legend() }}
+  <div class="print-only signature small">
+    <p>Vystavil: ______________________ &nbsp;&nbsp; Datum: ______________ &nbsp;&nbsp; Převzal: ______________________</p>
+  </div>
+</article>
+{% endmacro %}

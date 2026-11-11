@@ -1,0 +1,41 @@
+{% import "_macros.html" as ui with context %}
+{% from "odecty/_cellmacro.html" import cell %}
+<section class="card editor-panel" data-cell-id="c-{{ meter.id }}-{{ register }}-{{ day.isoformat() }}">
+  <header class="editor-head">
+    <strong>{{ meter.meter_point.name }}</strong> <span class="muted">{{ meter.serial }} · {{ register }} · {{ day|date_cs }}</span>
+    <button type="button" class="btn-link" data-close-editor aria-label="Zavřít">✕</button>
+  </header>
+  {% if saved %}<div class="alert alert-success">{{ saved }}</div>{% endif %}
+  {% for e in errors %}<div class="alert alert-error">{{ e }}</div>{% endfor %}
+  <form hx-post="/odecty/bunka" hx-target="#cell-editor" hx-swap="innerHTML" method="post" action="/odecty/bunka">
+    {{ ui.csrf_field() }}
+    <input type="hidden" name="meter_id" value="{{ meter.id }}">
+    <input type="hidden" name="register" value="{{ register }}">
+    <input type="hidden" name="den" value="{{ day.isoformat() }}">
+    <div class="editor-fields">
+      <div class="field"><label for="ce-value">Stav (kWh)</label>
+        <input id="ce-value" name="value" value="{{ value_raw }}" inputmode="decimal" class="num" autocomplete="off" autofocus></div>
+      <div class="field"><label for="ce-rep">Nahlásil</label><input id="ce-rep" name="reported_by" value="{{ reported_by }}" maxlength="200"></div>
+      <div class="field"><label for="ce-note">Poznámka</label><input id="ce-note" name="note" value="{{ note }}"></div>
+    </div>
+    {% if expected %}<p class="small muted">Předchozí odečet {{ expected.last.value|num }} ({{ expected.last.taken_at|date_cs }}){% if expected.expected is not none %}, očekáváno ≈ {{ expected.expected|num }} ({{ expected.low|num }}–{{ expected.high|num }}){% endif %}.</p>{% endif %}
+    {% if reading %}<p class="small muted">Zdroj: {{ ui.source_badge(reading.source) }}{% if reading.status == 'pending' %} <span class="badge badge-warning">nepotvrzeno</span>{% endif %}{% if reading.photo_id %} · <a href="/fotky/{{ reading.photo_id }}">fotka #{{ reading.photo_id }}</a>{% endif %}</p>{% endif %}
+    {% for i in issues %}
+    <label class="ack ack-{{ i.severity }}"><input type="checkbox" name="ack" value="{{ i.code }}"{% if i.code in acks %} checked{% endif %}>
+      <span>{{ i.message }}{% if i.link %} <a href="{{ i.link }}" target="_blank" rel="noopener">{{ i.link_label or 'Nastavení elektroměru' }}</a>{% endif %} <em>Potvrzuji, že hodnota je správně.</em></span></label>
+    {% endfor %}
+    <div class="rc-actions">
+      <button class="btn btn-primary" type="submit" name="action" value="save">Uložit</button>
+      {% if reading %}<button class="btn btn-danger" type="submit" name="action" value="delete" data-confirm="Opravdu smazat tento odečet?">Smazat</button>{% endif %}
+    </div>
+  </form>
+  {% if history %}
+  <details class="small"><summary>Historie změn ({{ history|length }})</summary>
+    <ul class="history">{% for h in history %}
+      <li>{{ h.at|datetime_cs }} · {{ h.user_email or 'systém' }} · {{ h.action }}
+        {% if h.action == 'update' and h.changes %}{% for k, v in h.changes.items() %} <code>{{ k }}: {{ v[0] }} → {{ v[1] }}</code>{% endfor %}{% endif %}
+        {% if h.note %}<br><span class="muted">{{ h.note }}</span>{% endif %}</li>
+    {% endfor %}</ul></details>
+  {% endif %}
+</section>
+{% if oob_cell %}<template>{{ cell(reading, meter.id, register, day, true, source_short, oob=true) }}</template>{% endif %}

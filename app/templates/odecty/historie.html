@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{% call ui.page_header('Historie změn', 'Kdo, kdy a co změnil u odečtů, fotek, elektroměrů a obchůzek.') %}<a class="btn" href="/odecty">Zpět na odečty</a>{% endcall %}
+<div class="table-wrap">
+<table class="data history-table">
+  <thead><tr><th>Kdy</th><th>Kdo</th><th>Akce</th><th>Objekt</th><th>Změny</th><th>Poznámka</th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+    {% set r = readings.get(e.entity_id) if e.entity_type == 'readings' else none %}
+    <tr>
+      <td>{{ e.at|datetime_cs }}</td>
+      <td>{{ e.user_email or '–' }}</td>
+      <td>{{ {'create': 'přidání', 'update': 'změna', 'delete': 'smazání', 'upload': 'nahrání'}.get(e.action, e.action) }}</td>
+      <td>
+        {% if e.entity_type == 'readings' %}
+          {% set mid = r.meter_id if r else (e.changes.meter_id if e.changes and e.changes.meter_id is defined else none) %}
+          odečet {% if mid and meters.get(mid) %}{{ meters[mid].serial }}{% endif %}
+          {% if r %}{{ r.register }} {{ r.taken_at|date_cs }}{% elif e.changes and e.changes.taken_at is defined %}{{ e.changes.register }} {{ e.changes.taken_at[:10] }}{% endif %}
+        {% elif e.entity_type == 'photos' %}<a href="/fotky/{{ e.entity_id }}">fotka #{{ e.entity_id }}</a>
+        {% else %}{{ e.entity_type }} #{{ e.entity_id }}{% endif %}
+      </td>
+      <td class="changes">
+        {% if e.action == 'update' and e.changes %}{% for k, v in e.changes.items() %}<code>{{ k }}: {{ v[0] }} → {{ v[1] }}</code> {% endfor %}
+        {% elif e.action in ('create', 'delete') and e.changes and e.entity_type == 'readings' %}<code>{{ e.changes.value }}</code>{% if e.changes.status == 'pending' %} (nepotvrzeno){% endif %}
+        {% endif %}
+      </td>
+      <td class="small">{{ e.note }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Zatím žádné změny.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p>{% if strana > 1 %}<a href="?strana={{ strana - 1 }}">← novější</a>{% endif %} {% if entries|length == 100 %}<a href="?strana={{ strana + 1 }}">starší →</a>{% endif %}</p>
+{% endblock %}

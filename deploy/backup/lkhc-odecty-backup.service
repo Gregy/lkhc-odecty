@@ -1,0 +1,21 @@
+# /etc/systemd/system/lkhc-odecty-backup.service - started by lkhc-odecty-backup.timer.
+# Manual run:  sudo systemctl start lkhc-odecty-backup.service ; journalctl -u lkhc-odecty-backup -n 50
+# A failure leaves the unit "failed" (systemctl --failed), a "BACKUP FAILED" line in the journal and
+# result "failed" in /srv/lkhc-odecty/backup/status.json.
+[Unit]
+Description=LKHC Odečty: off-site backup to Google Drive (rclone)
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+# Optional e-mail on failure (needs a working mailer, see deploy/README.md):
+# OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+Environment=APP_DIR=/srv/lkhc-odecty
+ExecStart=/srv/lkhc-odecty/backup.sh run
+TimeoutStartSec=3h
+Nice=10
+IOSchedulingClass=idle

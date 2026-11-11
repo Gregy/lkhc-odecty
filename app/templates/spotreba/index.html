@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+
+{% macro cons_table(tab, caption) %}
+<div class="table-wrap">
+  <table class="data sticky-first compact">
+    <caption>{{ caption }}</caption>
+    <thead>
+      <tr>
+        <th scope="col" rowspan="{{ 2 if p.split else 1 }}">Období</th>
+        {% for g, span, c in tab.groups %}
+        <th scope="colgroup" colspan="{{ span }}" class="num group-start{% if c.is_main %} main-col{% endif %}">
+          {%- if c.tenant_id -%}<a href="/najemci/{{ c.tenant_id }}">{{ ui.tenant({'id': c.tenant_id, 'name': g}) }}</a>
+          {%- elif c.point_id -%}<a href="/mista/{{ c.point_id }}">{{ g }}</a>
+          {%- else -%}{{ g }}{%- endif -%}
+        </th>
+        {% endfor %}
+      </tr>
+      {% if p.split %}
+      <tr>
+        {% for c in tab.cols %}<th scope="col" class="num{% if loop.first or c.group != tab.cols[loop.index0 - 1].group %} group-start{% endif %}">{{ c.label }}</th>{% endfor %}
+      </tr>
+      {% endif %}
+    </thead>
+    <tbody>
+      {% for r in tab.rows %}
+      <tr>
+        <th scope="row" class="nowrap">{{ r.label }}</th>
+        {% for v in r.cells %}
+        {% set c = tab.cols[loop.index0] %}
+        <td class="num{% if loop.first or c.group != tab.cols[loop.index0 - 1].group %} group-start{% endif %}">
+          {%- if tab.kind == 'aligned' %}{{ v|qvalue }}{% else %}{{ ui.num(v) }}{% endif -%}
+        </td>
+        {% endfor %}
+      </tr>
+      {% else %}
+      <tr><td colspan="{{ tab.cols|length + 1 }}" class="muted">Žádná data pro zvolené období.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if tab.rows %}
+    <tfoot>
+      <tr>
+        <th scope="row">Součet</th>
+        {% for v in tab.sums %}
+        {% set c = tab.cols[loop.index0] %}
+        <td class="num{% if loop.first or c.group != tab.cols[loop.index0 - 1].group %} group-start{% endif %}">{%- if tab.kind == 'aligned' %}{{ v|qvalue }}{% else %}{{ ui.num(v) }}{% endif -%}</td>
+        {% endfor %}
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+{% endmacro %}
+
+{% block content %}
+{% call ui.page_header("Spotřeba", "kWh po obdobích – nájemci a měřicí místa") %}
+  <a class="btn" href="/spotreba/export.xlsx?{{ p.query() }}">Export XLSX</a>
+  <a class="btn" href="/spotreba/export.csv?{{ p.query() }}">Export CSV</a>
+{% endcall %}
+
+<form class="filters" method="get" action="/spotreba">
+  <div class="field">
+    <span class="field-label small muted">Pohled</span>
+    <div class="segmented" role="group" aria-label="Pohled">
+      <a href="/spotreba?{{ p.query(pohled='zarovnane') }}" aria-current="{{ 'true' if p.view == 'zarovnane' else 'false' }}">Zarovnaná období</a>
+      <a href="/spotreba?{{ p.query(pohled='dny') }}" aria-current="{{ 'true' if p.view == 'dny' else 'false' }}">Surově po dnech odečtů</a>
+    </div>
+  </div>
+  <input type="hidden" name="pohled" value="{{ p.view }}">
+  <div class="field">
+    <label for="f-rok">Rok</label>
+    <select id="f-rok" name="rok">
+      <option value="vse"{% if not p.year %} selected{% endif %}>všechna data</option>
+      {% for y in years|reverse %}<option value="{{ y }}"{% if p.year == y %} selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+  </div>
+  {% if p.view == 'zarovnane' %}
+  <div class="field">
+    <label for="f-obdobi">Období</label>
+    <select id="f-obdobi" name="obdobi">
+      <option value="mesice"{% if p.granularity == 'mesice' %} selected{% endif %}>kalendářní měsíce</option>
+      <option value="hlavni"{% if p.granularity == 'hlavni' %} selected{% endif %}>mezi odečty hlavního elektroměru</option>
+    </select>
+  </div>
+  {% endif %}
+  <div class="field">
+    <label for="f-sazba">Sazba</label>
+    <select id="f-sazba" name="sazba">
+      <option value="1"{% if p.split %} selected{% endif %}>T1 / T2 zvlášť</option>
+      <option value="0"{% if not p.split %} selected{% endif %}>bez sazby (celkem)</option>
+    </select>
+  </div>
+  {% if p.view == 'zarovnane' and p.granularity == 'mesice' %}
+  {{ ui.checkbox('predbezne', 'i měsíce bez odečtů (předběžné)', p.provisional) }}
+  {% endif %}
+  <div class="field"><button class="btn btn-primary" type="submit">Zobrazit</button></div>
+</form>
+
+{% if p.view == 'zarovnane' %}
+<p class="muted small">
+  <strong>Zarovnaná období</strong> (hlavní režim): společné hranice pro všechny měřáky, stav na hranici je skutečný odečet,
+  nebo dopočtený z okolních odečtů. Součet přes období přesně sedí na rozdíl skutečných odečtů.
+</p>
+{% else %}
+<div class="alert alert-info small">
+  <span><strong>Surový pohled po dnech odečtů</strong> (jako list „Spotřeba“ / „Rozpočítání“ v původní tabulce): řádek = den, kdy byl
+  odečten aspoň jeden elektroměr. Když měřák v daný den odečten nebyl, jeho spotřeba se celá připíše dni, kdy byl odečten příště;
+  pozdě nahlášený odečet nájemce tvoří vlastní řádek. Proto zde vycházejí zkreslené (i záporné) hodnoty zbytku.
+  „–“ = v období žádný odečet. Pro vyúčtování a přehledy se používají zarovnaná období.</span>
+</div>
+{% endif %}
+{% if note %}<div class="alert alert-warning small"><span>{{ note }}</span></div>{% endif %}
+{{ rm.freshness(cov, today) }}
+
+<h2>Po nájemcích</h2>
+{{ cons_table(ttab, "Spotřeba po nájemcích (kWh)" ~ (" – " ~ p.year if p.year else "")) }}
+{% if p.view == 'zarovnane' %}{{ rm.quality_legend("Zbytek = hlavní elektroměr − ostatní nájemci; záporné hodnoty jsou zvýrazněny.") }}{% endif %}
+
+<h2>Po měřicích místech</h2>
+{{ cons_table(ptab, "Spotřeba po měřicích místech (kWh)" ~ (" – " ~ p.year if p.year else "")) }}
+{% endblock %}
+{% block scripts %}{{ rm.reports_scripts() }}{% endblock %}

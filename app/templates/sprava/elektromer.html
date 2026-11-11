@@ -1,0 +1,26 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "sprava/_forms.html" as af with context %}
+{% block sprava %}
+<p><a href="/sprava/mista/{{ m.meter_point_id }}">← {{ m.meter_point.name }}</a></p>
+<section class="card">
+  <h2 class="card-title">Elektroměr {{ m.serial }}</h2>
+  <p class="muted small">Odečtů: {{ n_readings }}. Výměnu zadávejte na stránce místa („Výměna elektroměru“), aby vznikl nový elektroměr a historie zůstala zachována.</p>
+  <form method="post" action="/sprava/elektromery/{{ m.id }}">
+    {{ ui.csrf_field() }}
+    {{ af.meter_fields(m, '', sources) }}
+    <div class="field">
+      <label for="f-meter_point_id">Měřicí místo</label>
+      <select id="f-meter_point_id" name="meter_point_id">{% for x in points %}<option value="{{ x.id }}"{% if x.id == m.meter_point_id %} selected{% endif %}>{{ x.name }}</option>{% endfor %}</select>
+      <p class="field-help">Přesun na jiné místo změní, ke komu se historická spotřeba počítá.</p>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Uložit</button></div>
+  </form>
+</section>
+{% if not n_readings %}
+<form method="post" action="/sprava/elektromery/{{ m.id }}/smazat" class="inline-form">
+  {{ ui.csrf_field() }}
+  <button class="btn btn-danger" type="submit" data-confirm="Smazat elektroměr {{ m.serial }}?">Smazat elektroměr</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block content %}
+{% call ui.page_header(tenant.name, 'zbytek: hlavní elektroměr − ostatní nájemci' if tenant.is_remainder else 'nájemce / odběratel') %}
+  <a class="btn" href="/najemci">Všichni nájemci</a>
+  {% if current_user.is_admin %}<a class="btn" href="/sprava/najemci/{{ tenant.id }}">Upravit</a>{% endif %}
+{% endcall %}
+
+<form class="filters" method="get">
+  <div class="field">
+    <label for="f-rok">Rok</label>
+    <select id="f-rok" name="rok">{% for y in years|reverse %}<option value="{{ y }}"{% if y == year %} selected{% endif %}>{{ y }}</option>{% endfor %}</select>
+  </div>
+  {{ ui.checkbox('predbezne', 'i měsíce bez odečtů (předběžné)', provisional) }}
+  <div class="field"><button class="btn btn-primary" type="submit">Zobrazit</button></div>
+</form>
+
+{% if not tenant.is_remainder %}
+<section class="card">
+  <h2 class="card-title">Měřicí místa</h2>
+  {% if allocations %}
+  <ul class="issues">
+    {% for a in allocations %}
+    <li><a href="/mista/{{ a.point.id }}">{{ a.point.name }}</a>{% if a.rule.factor != 1 %} × {{ a.rule.factor|num(3) }}{% endif %}
+      {% if a.rule.valid_from or a.rule.valid_to %}<span class="muted small">({{ ('od ' ~ a.rule.valid_from|date_cs) if a.rule.valid_from }} {{ ('do ' ~ a.rule.valid_to|date_cs) if a.rule.valid_to }})</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Nájemce nemá přiřazená žádná měřicí místa.</p>{% endif %}
+</section>
+{% endif %}
+
+{{ rm.freshness(cov, today) }}
+{% if not rng %}
+<section class="card"><p class="muted">Pro rok {{ year }} zatím nejsou data{% if not provisional %} (zaškrtněte „i měsíce bez odečtů“ pro předběžný odhad){% endif %}.</p></section>
+{% else %}
+<section class="card">
+  <h2 class="card-title">Měsíční spotřeba {{ year }}{% if has_prev %} vs. {{ year - 1 }}{% endif %}</h2>
+  <div class="chart-box"><canvas id="chart-tenant" role="img" aria-label="Sloupcový graf měsíční spotřeby nájemce {{ tenant.name }} v roce {{ year }}{% if has_prev %} s čárou roku {{ year - 1 }}{% endif %}; hodnoty jsou v tabulce níže."></canvas></div>
+  <div class="chart-legend" id="chart-tenant-legend"></div>
+  <p class="muted small">kWh T1+T2. Šrafovaný sloupec = předběžné hodnoty (chybí pozdější odečet).{% if tenant.is_remainder %} Záporné hodnoty zbytku se kreslí pod osu.{% endif %}</p>
+  <script type="application/json" id="chart-tenant-data">{{ chart_json }}</script>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Po měsících</h2>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th scope="col">Měsíc</th><th scope="col" class="num">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Celkem</th></tr></thead>
+      <tbody>
+        {% for m in months %}
+        <tr><th scope="row">{{ m.label }}</th><td class="num">{{ m.regs.T1|qvalue }}</td><td class="num">{{ m.regs.T2|qvalue }}</td><td class="num strong">{{ m.total|qvalue }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th scope="row" title="{{ rng[0]|date_cs }} – {{ rng[1]|date_cs }}">Součet</th><td class="num">{{ sums.T1|qvalue }}</td><td class="num">{{ sums.T2|qvalue }}</td><td class="num">{{ sums.total|qvalue }}</td></tr>
+        {% if prev_sum %}<tr><th scope="row">Loni (stejné měsíce)</th><td></td><td></td><td class="num">{{ prev_sum|qvalue }}</td></tr>{% endif %}
+      </tfoot>
+    </table>
+  </div>
+  {{ rm.quality_legend() }}
+</section>
+
+<section class="card">
+  <h2 class="card-title">{{ 'Skladba zbytku' if tenant.is_remainder else 'Po měřicích místech' }}</h2>
+  <div class="table-wrap">
+    <table class="data sticky-first compact">
+      <thead><tr><th scope="col">{{ 'Složka' if tenant.is_remainder else 'Místo' }}</th>{% for s in periods %}<th scope="col" class="num">{{ s.start.month }}/{{ s.start.year }}</th>{% endfor %}<th scope="col" class="num group-start">Součet</th></tr></thead>
+      <tbody>
+        {% for b in breakdown %}
+        <tr>
+          <th scope="row">{% if b.tenant %}<a href="{{ b.link }}">− {{ ui.tenant(b.tenant) }}</a>{% elif b.link %}<a href="{{ b.link }}">{{ b.label }}</a>{% else %}{{ b.label }}{% endif %}</th>
+          {% for v in b['values'] %}<td class="num">{{ v|qvalue if v is not none else '–' }}</td>{% endfor %}
+          <td class="num group-start strong">{{ b.sum|qvalue }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th scope="row">= {{ tenant.name }}</th>{% for m in months %}<td class="num">{{ m.total|qvalue }}</td>{% endfor %}<td class="num group-start">{{ sums.total|qvalue }}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+  {% if tenant.is_remainder %}<p class="muted small">Do zbytku spadají i nealokovaná a kontrolní místa. Záporný zbytek obvykle znamená, že podružné měřáky byly odečteny jindy než hlavní nebo chybí odečet – viz kvalitu hodnot.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{{ rm.chart_scripts() }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.LKHCCharts) LKHCCharts.monthlyBars("chart-tenant", "chart-tenant-data", "chart-tenant-legend");
+});
+</script>
+{% endblock %}

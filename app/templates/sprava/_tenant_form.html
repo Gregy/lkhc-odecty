@@ -1,0 +1,11 @@
+{% import "_macros.html" as ui with context %}
+<div class="form-grid">
+  {{ ui.field('name', 'Název', t.name if t else '', required=true) }}
+  {{ ui.field('sort_order', 'Pořadí', t.sort_order if t else 100, type='number', attrs={'step': 1, 'inputmode': 'numeric'}) }}
+  {{ ui.field('color', 'Barva (světlý režim)', t.color if t and t.color else '#888888', type='color') }}
+  {{ ui.field('color_dark', 'Barva (tmavý režim)', t.color_dark if t and t.color_dark else (t.color if t and t.color else '#999999'), type='color') }}
+  {{ ui.checkbox('is_remainder', 'Zbytkový nájemce (hlavní elektroměr − ostatní; jen jeden)', t.is_remainder if t else false) }}
+  {{ ui.checkbox('active', 'Aktivní', t.active if t else true) }}
+  <div class="span-2">{{ ui.textarea('note', 'Poznámka', t.note if t else '', rows=2) }}</div>
+</div>
+<p class="field-help">Barvy jsou kategorická paleta grafů; měňte je jen když je to nutné (nájemce má mít napříč aplikací stále stejnou barvu).</p>

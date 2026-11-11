@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block content %}
+{{ ui.page_header("Přehled") }}
+
+<section class="tiles" aria-label="Aktuálnost dat">
+  <div class="tile{% if days_main is not none and days_main > 45 %} tile-warn{% endif %}">
+    <div class="tile-label">Hlavní elektroměr odečten</div>
+    <div class="tile-value">{{ cov.last_main_reading|date_cs if cov.last_main_reading else '–' }}</div>
+    {% if days_main is not none %}<div class="tile-sub">{% if days_main <= 0 %}dnes{% else %}před {{ days_main }} {{ 'dnem' if days_main == 1 else 'dny' }}{% endif %}</div>{% endif %}
+  </div>
+  <div class="tile{% if days_data is not none and days_data > 45 %} tile-warn{% endif %}">
+    <div class="tile-label">Nejnovější odečet</div>
+    <div class="tile-value">{{ cov.last_reading|date_cs if cov.last_reading else '–' }}</div>
+    {% if days_data is not none %}<div class="tile-sub">{% if days_data <= 0 %}dnes{% else %}před {{ days_data }} {{ 'dnem' if days_data == 1 else 'dny' }}{% endif %}</div>{% endif %}
+  </div>
+  <div class="tile{% if stale %} tile-warn{% endif %}">
+    <div class="tile-label">Registry bez aktuálního odečtu</div>
+    <div class="tile-value">{{ stale|length }}</div>
+    <div class="tile-sub"><a href="#chybejici">podrobnosti</a></div>
+  </div>
+  <div class="tile{% if pending_photos %} tile-info{% endif %}">
+    <div class="tile-label">Fotky ke kontrole</div>
+    <div class="tile-value">{{ pending_photos }}</div>
+    <div class="tile-sub"><a href="/odecty/kontrola">otevřít kontrolu</a></div>
+  </div>
+</section>
+
+{% if not has_data %}
+<section class="card"><p>Zatím nejsou k dispozici žádné odečty. Začněte <a href="/obchuzka">obchůzkou</a> nebo <a href="/odecty">zadáním odečtů</a>.</p></section>
+{% else %}
+
+<section class="card">
+  <h2 class="card-title">Spotřeba po nájemcích</h2>
+  <p class="muted small">
+    Poslední období s daty: <strong>{{ lm_start|date_cs }} – {{ lm_end|date_cs }}</strong>;
+    od začátku roku: {{ ytd_start|date_cs }} – {{ lm_end|date_cs }}.
+    {% if (today - lm_end).days > 40 %}<br><span class="warn-text">Za období po {{ lm_end|date_cs }} zatím nejsou odečty hlavního elektroměru.</span>{% endif %}
+  </p>
+  <div class="table-wrap only-wide">
+    <table class="data sticky-first">
+      <thead>
+        <tr>
+          <th scope="col" rowspan="2">Nájemce</th>
+          <th scope="colgroup" colspan="3" class="num group-start">Poslední měsíc</th>
+          <th scope="colgroup" colspan="3" class="num group-start">Od 1. 1. {{ year }}</th>
+          <th scope="col" rowspan="2" class="num group-start" title="Stejné období loni ({{ prev_start|date_cs }} – {{ prev_end|date_cs }})">Loni<br><span class="muted small">stejné obd.</span></th>
+        </tr>
+        <tr>
+          <th scope="col" class="num group-start">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Celkem</th>
+          <th scope="col" class="num group-start">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Celkem</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <th scope="row"><a href="/najemci/{{ r.tenant.id }}">{{ ui.tenant(r.tenant) }}</a>{% if r.tenant.is_remainder %} <span class="muted small" title="Zbytek = hlavní elektroměr − ostatní nájemci">(zbytek)</span>{% endif %}</th>
+          <td class="num group-start">{{ r.last.T1|qvalue }}</td>
+          <td class="num">{{ r.last.T2|qvalue }}</td>
+          <td class="num strong">{{ r.last.total|qvalue }}</td>
+          <td class="num group-start">{{ r.ytd.T1|qvalue }}</td>
+          <td class="num">{{ r.ytd.T2|qvalue }}</td>
+          <td class="num strong">{{ r.ytd.total|qvalue }}</td>
+          <td class="num group-start">{{ r.prev|qvalue if r.prev else '–' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">Hlavní elektroměr</th>
+          <td class="num group-start">{{ totals.last.T1|qvalue }}</td>
+          <td class="num">{{ totals.last.T2|qvalue }}</td>
+          <td class="num">{{ totals.last.total|qvalue }}</td>
+          <td class="num group-start">{{ totals.ytd.T1|qvalue }}</td>
+          <td class="num">{{ totals.ytd.T2|qvalue }}</td>
+          <td class="num">{{ totals.ytd.total|qvalue }}</td>
+          <td class="num group-start">{{ totals.prev|qvalue if totals.prev else '–' }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div class="table-wrap only-narrow">
+    <table class="data sticky-first compact">
+      <thead><tr>
+        <th scope="col">Nájemce</th>
+        <th scope="col" class="num">{{ lm_start.month }}/{{ lm_start.year }}</th>
+        <th scope="col" class="num">Od 1. 1.</th>
+        <th scope="col" class="num">Loni</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <th scope="row"><a href="/najemci/{{ r.tenant.id }}">{{ ui.tenant(r.tenant) }}</a></th>
+          <td class="num">{{ r.last.total|qvalue }}</td>
+          <td class="num strong">{{ r.ytd.total|qvalue }}</td>
+          <td class="num">{{ r.prev|qvalue if r.prev else '–' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><th scope="row">Hlavní</th><td class="num">{{ totals.last.total|qvalue }}</td><td class="num">{{ totals.ytd.total|qvalue }}</td><td class="num">{{ totals.prev|qvalue if totals.prev else '–' }}</td></tr></tfoot>
+    </table>
+  </div>
+  <p class="muted small only-narrow">T1+T2 v kWh; rozpad na tarify na širší obrazovce nebo v <a href="/spotreba">Spotřebě</a>.</p>
+  {{ rm.quality_legend("Hodnoty v kWh, zarovnané na kalendářní měsíce.") }}
+</section>
+
+<section class="card">
+  <h2 class="card-title">Měsíční spotřeba {{ year }} po nájemcích{% if chart_has_prev %} a celkem v roce {{ year - 1 }}{% endif %}</h2>
+  <div class="chart-box chart-tall"><canvas id="chart-monthly" role="img" aria-label="Skládaný sloupcový graf měsíční spotřeby po nájemcích v roce {{ year }}{% if chart_has_prev %} s čárou celkové spotřeby v roce {{ year - 1 }}{% endif %}. Hodnoty jsou v tabulce na stránce Spotřeba."></canvas></div>
+  <div class="chart-legend" id="chart-monthly-legend"></div>
+  <p class="muted small">Sloupce jsou zarovnané kalendářní měsíce (kWh, T1+T2). Šrafovaný sloupec = předběžné hodnoty (chybí pozdější odečet). Záporný zbytek se kreslí pod osu. Tabulka: <a href="/spotreba?rok={{ year }}">Spotřeba {{ year }}</a>.</p>
+  <script type="application/json" id="chart-monthly-data">{{ chart_json }}</script>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Bilance hlavní a kontrolní vs. podružné</h2>
+  {% if balance %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr>
+        <th scope="col">Měřák</th><th scope="col">Tarif</th>
+        <th scope="col" class="num group-start">Měřák<br><span class="muted small">posl. měsíc</span></th><th scope="col" class="num">Σ podružné</th><th scope="col" class="num">Rozdíl</th>
+        <th scope="col" class="num group-start">Měřák<br><span class="muted small">od 1. 1.</span></th><th scope="col" class="num">Σ podružné</th><th scope="col" class="num">Rozdíl</th>
+      </tr></thead>
+      <tbody>
+        {% for b in balance %}
+        <tr>
+          <th scope="row" class="wrap"><a href="/mista/{{ b.point.id }}">{{ b.point.name }}</a><br><span class="badge badge-muted" title="{{ b.children|join(', ') }}">{{ 'hlavní' if b.point.role == 'main' else 'kontrolní' }} · {{ b.children|length }} podř.</span></th>
+          <td>{{ b.register }}</td>
+          {% if b.last %}
+          <td class="num group-start">{{ b.last.control|qvalue }}</td><td class="num">{{ b.last.children|qvalue }}</td><td class="num strong">{{ b.last.difference|qvalue }}</td>
+          {% else %}<td class="num group-start">–</td><td class="num">–</td><td class="num">–</td>{% endif %}
+          <td class="num group-start">{{ b.ytd.control|qvalue }}</td><td class="num">{{ b.ytd.children|qvalue }}</td><td class="num strong">{{ b.ytd.difference|qvalue }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">Rozdíl = neměřená spotřeba (u hlavního elektroměru je to vlastní spotřeba zbytkového nájemce a nealokovaných míst). Záporný rozdíl znamená, že podružné měřáky naměřily víc než nadřazený – obvykle odečty v různé dny nebo chyba odečtu.</p>
+  {% else %}<p class="muted">Bez dat pro bilanci.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card" id="upozorneni">
+  <h2 class="card-title">Upozornění</h2>
+  {% if pending_photos %}
+  {{ ui.alert_box("Fotky čekající na kontrolu: " ~ pending_photos ~ ".", "info", "/odecty/kontrola") }}
+  {% endif %}
+  {% if pending_readings %}{{ ui.alert_box(pending_readings.message, "info", pending_readings.link) }}{% endif %}
+  {% macro alert_row(a) %}
+  <div class="alert alert-{{ a.severity }}">
+    <span class="alert-kind">{{ {'anomaly': 'Anomálie', 'negative_remainder': 'Záporný zbytek', 'control_balance': 'Bilance'}.get(a.kind, a.kind) }}</span>
+    <span>{{ a.message }}</span>{% if a.link %} <a href="{{ a.link }}">Detail</a>{% endif %}
+  </div>
+  {% endmacro %}
+  {% for a in alerts[:4] %}{{ alert_row(a) }}{% endfor %}
+  {% if alerts|length > 4 %}
+  <details class="stale-list">
+    <summary><strong>Další upozornění: {{ alerts|length - 4 }}</strong> (anomálie, záporný zbytek, bilance za posledních 12 měsíců)</summary>
+    {% for a in alerts[4:] %}{{ alert_row(a) }}{% endfor %}
+  </details>
+  {% endif %}
+  {% if not alerts and not pending_photos and not pending_readings and not stale %}<p class="muted">Žádná upozornění.</p>{% endif %}
+
+  {% if stale %}
+  <details class="stale-list" id="chybejici" {% if stale|length <= 5 %}open{% endif %}>
+    <summary><strong>Chybějící odečty: {{ stale|length }} {{ 'registr' if stale|length == 1 else ('registry' if stale|length < 5 else 'registrů') }}</strong> – déle než obvyklý interval bez odečtu</summary>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th scope="col">Místo</th><th scope="col">Elektroměr</th><th scope="col">Tarif</th><th scope="col">Poslední odečet</th><th scope="col" class="num">Dní</th><th scope="col" class="num">Obvykle</th></tr></thead>
+        <tbody>
+          {% for s in stale %}
+          <tr>
+            <td><a href="/mista/{{ s.meter.meter_point_id }}">{{ s.point_name }}</a></td>
+            <td>{{ s.meter.serial }}</td>
+            <td>{{ s.register }}</td>
+            <td>{{ s.staleness.last.taken_at|date_cs if s.staleness.last else 'nikdy' }}</td>
+            <td class="num strong">{{ s.staleness.days_since|num if s.staleness.days_since is not none else '–' }}</td>
+            <td class="num muted">{{ s.staleness.usual_interval_days|num }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small"><a class="btn" href="/obchuzka">Zahájit obchůzku</a></p>
+  </details>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+{{ rm.chart_scripts() }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.LKHCCharts) LKHCCharts.monthlyStacked("chart-monthly", "chart-monthly-data", "chart-monthly-legend");
+});
+</script>
+{% endblock %}

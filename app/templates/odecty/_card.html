@@ -1,0 +1,121 @@
+{#- One review card (photo series). Context: card, meters, points, problem_label, photo_problems, today,
+    optional posted/form_day/form_reported_by when re-rendering a submitted form. -#}
+{% import "_macros.html" as ui with context %}
+{% set is_admin = current_user and current_user.is_admin %}
+{% set day_value = form_day if posted else (card.day.isoformat() if card.day else '') %}
+{% set rep_value = form_reported_by if posted else card.reported_by %}
+<article class="card review-card{% if card.clean %} is-clean{% endif %}" id="karta-{{ card.key }}" data-card="{{ card.key }}"
+  {% if card.extraction_pending %}hx-get="/odecty/kontrola/karta/{{ card.key }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
+  <header class="rc-head">
+    <div class="rc-title">
+      {% if card.taken_at %}<strong>{{ card.taken_at|datetime_cs }}</strong>{% else %}<span class="badge badge-warning">bez data pořízení</span>{% endif %}
+      <span class="muted">· {{ card.photos|length }} {{ 'fotka' if card.photos|length == 1 else ('fotky' if card.photos|length < 5 else 'fotek') }}</span>
+      {% if card.photos|length > 1 %}<span class="badge" title="Fotky pořízené do 60 s po sobě">série</span>{% endif %}
+      {% for s in card.photos|map(attribute='source')|unique %}{{ ui.badge({'walk': 'obchůzka', 'upload': 'dávka', 'share': 'sdíleno'}.get(s, s), 'muted') }}{% endfor %}
+      {% if card.reported_by %}{{ ui.badge('nahlásil: ' ~ card.reported_by, 'info') }}{% endif %}
+    </div>
+    <div>
+      {% if card.extraction_pending %}<span class="badge badge-info"><span class="spinner" aria-hidden="true"></span> rozpoznávám…</span>
+      {% elif card.clean %}<span class="badge badge-success">bez varování</span>
+      {% else %}<span class="badge badge-warning" title="{{ card.blockers()|join(', ') }}">ke kontrole</span>{% endif %}
+    </div>
+  </header>
+
+  <div class="rc-body">
+    <div class="rc-photos">
+      {% for p in card.photos %}
+      <figure class="rc-photo">
+        <button type="button" class="thumb-btn" data-viewer-src="/fotky/{{ p.id }}/soubor" data-viewer-title="Fotka #{{ p.id }}{% if p.taken_at %} · {{ p.taken_at|datetime_cs }}{% endif %}">
+          <img src="/fotky/{{ p.id }}/nahled" alt="Fotka #{{ p.id }}" loading="lazy" width="160" height="120">
+        </button>
+        <figcaption>
+          <a href="/fotky/{{ p.id }}">#{{ p.id }}</a>{% if p.taken_at %} {{ p.taken_at.strftime('%H:%M:%S') }}{% endif %}
+          {% if p.extraction_status == 'failed' %}<span class="badge badge-error" title="{{ p.extraction_error or '' }}">chyba rozpoznání</span>
+          {% elif p.extraction_status == 'queued' %}<span class="badge badge-info">ve frontě</span>{% endif %}
+          {% for prob in photo_problems(p) %}<span class="badge badge-warning">{{ prob }}</span>{% endfor %}
+        </figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+
+    <form class="rc-form" method="post" action="/odecty/kontrola/potvrdit"
+          hx-post="/odecty/kontrola/potvrdit" hx-target="#karta-{{ card.key }}" hx-swap="outerHTML">
+      {{ ui.csrf_field() }}
+      <input type="hidden" name="card" value="{{ card.key }}">
+      <input type="hidden" name="photo_ids" value="{{ card.photo_ids|join(',') }}">
+
+      {% for e in card.errors %}<div class="alert alert-error">{{ e }}</div>{% endfor %}
+
+      <div class="rc-meta">
+        <div class="field{% if card.date_required and not day_value %} needs-input{% endif %}">
+          <label for="den-{{ card.key }}">Datum odečtu <span class="req" aria-hidden="true">*</span></label>
+          <input id="den-{{ card.key }}" type="date" name="den" value="{{ day_value }}" max="{{ today.isoformat() }}" required>
+          {% if card.date_required %}
+          <p class="field-help">Fotka nemá čas pořízení (EXIF) – zadejte skutečné datum odečtu.
+            {% if card.suggested %}
+            <button type="button" class="btn-link" data-fill-target="#den-{{ card.key }}" data-fill-value="{{ card.suggested.value.date().isoformat() }}">
+              Použít {{ card.suggested.value|date_cs }}</button>
+            ({{ 'z názvu souboru WhatsApp – datum odeslání, ne nutně pořízení' if card.suggested.source == 'whatsapp' else 'z názvu souboru' }})
+            {% endif %}
+          </p>
+          {% endif %}
+        </div>
+        <div class="field">
+          <label for="rep-{{ card.key }}">Nahlásil (nájemce)</label>
+          <input id="rep-{{ card.key }}" type="text" name="reported_by" value="{{ rep_value }}" maxlength="200" placeholder="např. Novák (WhatsApp)">
+        </div>
+      </div>
+
+      {% for row in card.rows %}{% include "odecty/_row.html" %}{% endfor %}
+      {% if not card.rows %}
+        <p class="muted">Na fotkách nebyl rozpoznán žádný stav{% if card.extraction_pending %} (rozpoznávání ještě běží){% endif %}. Přidejte odečet ručně nebo fotky zahoďte.</p>
+      {% endif %}
+      <div class="rc-newrows" data-newrows></div>
+      <template data-row-template>
+        {% with row = none, new_row = true %}{% include "odecty/_row.html" %}{% endwith %}
+      </template>
+
+      {% if is_admin %}
+      <div class="rc-actions">
+        <button type="submit" class="btn btn-primary">Potvrdit a zapsat</button>
+        <button type="button" class="btn" data-add-row>+ další elektroměr</button>
+        <button type="button" class="btn btn-danger" hx-post="/odecty/kontrola/zahodit" hx-vals='{"photo_ids": "{{ card.photo_ids|join(',') }}"}'
+                hx-target="#karta-{{ card.key }}" hx-swap="outerHTML" data-confirm="Zahodit fotky této karty? (zůstanou ve Fotkách)">Zahodit fotky</button>
+      </div>
+      {% endif %}
+    </form>
+
+    {% if is_admin %}
+    {% for row in card.rows if row.unknown_serial %}
+    <details class="rc-newmeter">
+      <summary>Neznámé výrobní číslo <strong>{{ row.serial_seen }}</strong> – založit elektroměr / výměna</summary>
+      <form method="post" action="/odecty/kontrola/elektromer" class="grid-form">
+        {{ ui.csrf_field() }}
+        <input type="hidden" name="back" value="{{ card.key }}">
+        <div class="field"><label>Výrobní číslo</label><input name="serial" value="{{ row.serial_seen }}" required></div>
+        <div class="field"><label>Měřicí místo</label>
+          <select name="point_id"><option value="">— nové místo —</option>
+            {% for p in points %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Název nového místa</label><input name="new_point_name" placeholder="jen když místo neexistuje"></div>
+        <div class="field"><label>Nahrazuje elektroměr (výměna)</label>
+          <select name="replace_meter_id"><option value="">— ne, nový elektroměr —</option>
+            {% for m in meters if m.active %}<option value="{{ m.id }}">{{ m.label }}</option>{% endfor %}</select></div>
+        <div class="field"><label>Instalován od</label><input type="date" name="installed_on" value="{{ card.day.isoformat() if card.day else '' }}"></div>
+        <div class="field field-check"><label><input type="checkbox" name="registers" value="T1" checked> T1</label>
+          <label><input type="checkbox" name="registers" value="T2"> T2</label></div>
+        <div class="field"><label>Celých míst počitadla</label><input type="number" name="digits" value="5" min="1" max="12"></div>
+        <div class="field"><label>Desetinných míst na displeji</label><input type="number" name="decimals_shown" value="0" min="0" max="3"></div>
+        <div class="field"><label>Poznámka pro rozpoznávání</label><input name="display_note" placeholder="např. displej cykluje T1/T2"></div>
+        <div class="field"><label>Počáteční stav nového k datu instalace (T1 / T2)</label>
+          <div class="inline-pair"><input name="initial_T1" inputmode="decimal" placeholder="T1, např. 0"><input name="initial_T2" inputmode="decimal" placeholder="T2"></div>
+          <p class="field-help">Znáte-li ho (nový elektroměr obvykle 0). Prázdné = počítá se až od prvního odečtu – pak dejte datum instalace před den fotky, jinak se stav z fotky srazí s počátečním.</p></div>
+        <div class="field"><label>Konečný stav starého (jen u výměny; T1 / T2)</label>
+          <div class="inline-pair"><input name="old_final_T1" inputmode="decimal" placeholder="T1"><input name="old_final_T2" inputmode="decimal" placeholder="T2"></div>
+          <p class="field-help">Nepovinné. Bez něj se spotřeba starého od jeho posledního odečtu do výměny dopočte odhadem.</p></div>
+        <div><button class="btn" type="submit">Založit elektroměr</button></div>
+      </form>
+    </details>
+    {% endfor %}
+    {% endif %}
+  </div>
+</article>

@@ -1,0 +1,24 @@
+# LKHC Odečty (/srv/lkhc-odecty). The host name comes from /srv/proxy/.env (LKHC_ODECTY_HOST);
+# after changing it: cd /srv/proxy && docker compose up -d (env is read when the container starts).
+# Caddy gets the certificate itself and sends X-Forwarded-For/-Proto/-Host; the app trusts them only
+# from the proxy's address (FORWARDED_ALLOW_IPS in its compose.yml). HSTS, Secure cookies and https
+# URLs come from the app itself (BASE_URL=https://...).
+{$LKHC_ODECTY_HOST} {
+	import common
+
+	# The app has its own, finer limits: 30 MB per photo, 64 MB for a no-JS form post. The batch page
+	# and the walk send one photo per request (3-4 MB); a share from WhatsApp without the service
+	# worker is a single multipart POST with all shared photos (the app discards it with an explanation).
+	# 100 MB lets all of these reach the app instead of failing with Caddy's bare 413.
+	request_body {
+		max_size 100MB
+	}
+
+	reverse_proxy lkhc-odecty:8000 {
+		transport http {
+			# uvicorn closes idle keep-alive connections after 5 s. Close ours sooner, so a POST is
+			# never sent on a connection the app has just closed (that would be a 502).
+			keepalive 4s
+		}
+	}
+}

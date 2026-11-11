@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% import "vyuctovani/_protocol.html" as proto with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block body_class %}print-view{% endblock %}
+{% block content %}
+<div class="no-print actions" style="margin-bottom: 16px">
+  <a class="btn" href="/vyuctovani/{{ s.id }}">Zpět na vyúčtování</a>
+  <button class="btn btn-primary" type="button" onclick="window.print()">Tisknout / uložit PDF</button>
+</div>
+{% if summary %}
+<section class="protocol">
+  <h1>{{ s.name }}</h1>
+  <div class="protocol-meta">
+    <span>Období <strong>{{ dt(doc.start) }} – {{ dt(doc.end) }}</strong></span>
+    <span>{{ MODE_LABELS.get(doc.mode, doc.mode) }}</span>
+    <span>{{ proto.status_line() }}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th scope="col">Nájemce</th><th scope="col" class="num">T1 kWh</th><th scope="col" class="num">T2 kWh</th><th scope="col" class="num">Celkem kWh</th><th scope="col">Kvalita</th></tr></thead>
+      <tbody>
+        {% for t in doc.tenants %}
+        <tr><th scope="row">{{ ui.tenant(t) }}</th><td class="num">{{ rm.qd(t.totals.T1) }}</td><td class="num">{{ rm.qd(t.totals.T2) }}</td><td class="num strong">{{ rm.qd(t.total) }}</td><td>{{ rm.qbadge(t.total.quality) }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><th scope="row">Hlavní elektroměr</th><td class="num">{{ rm.qd(doc.main.T1) }}</td><td class="num">{{ rm.qd(doc.main.T2) }}</td><td class="num">{{ rm.qd(doc.main_total) }}</td><td>{{ rm.qbadge(doc.main_total.quality) }}</td></tr></tfoot>
+    </table>
+  </div>
+  {% if doc.check.provisional %}
+  <p class="small"><strong>Předběžné stavy na hranicích:</strong></p>
+  <ul class="issues small">{% for m in doc.check.provisional %}<li>{{ m }}</li>{% endfor %}</ul>
+  {% endif %}
+  {{ rm.quality_legend() }}
+</section>
+{% endif %}
+{% for p in protocols %}{{ proto.protocol(p, 2) }}{% endfor %}
+{% endblock %}
+{% block scripts %}{{ rm.reports_scripts() }}{% endblock %}

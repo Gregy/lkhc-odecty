@@ -1,0 +1,15 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<div class="tiles">
+  <a class="tile" href="/sprava/najemci"><div class="tile-label">Nájemci</div><div class="tile-value">{{ counts.tenants }}</div></a>
+  <a class="tile" href="/sprava/mista"><div class="tile-label">Měřicí místa / elektroměry</div><div class="tile-value">{{ counts.points }} / {{ counts.meters }}</div></a>
+  <a class="tile" href="/sprava/alokace"><div class="tile-label">Alokace</div><div class="tile-value">{{ counts.allocations }}</div></a>
+  <a class="tile" href="/sprava/uzivatele"><div class="tile-label">Uživatelé</div><div class="tile-value">{{ counts.users }}</div></a>
+</div>
+<section class="card">
+  <h2 class="card-title">Poslední změny</h2>
+  {% include "sprava/_audit_table.html" %}
+  <p><a href="/sprava/audit">Celý auditní log</a></p>
+</section>
+{% endblock %}

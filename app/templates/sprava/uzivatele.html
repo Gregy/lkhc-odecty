@@ -1,0 +1,42 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<p class="muted small">Přihlášení přes Google účet v doméně {{ domain }}. Nový uživatel z domény se při prvním přihlášení založí jako čtenář; e-maily v ADMIN_EMAILS jsou vždy administrátoři.</p>
+<div class="table-wrap">
+  <table class="data compact">
+    <thead><tr><th scope="col">E-mail</th><th scope="col">Jméno</th><th scope="col">Role</th><th scope="col">Aktivní</th><th scope="col">Poslední přihlášení</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr{% if not u.active %} class="muted"{% endif %}>
+        <th scope="row">{{ u.email }}{% if u.id == current_user.id %} <span class="badge">vy</span>{% endif %}{% if u.email|lower in admin_emails %} <span class="badge badge-info" title="V ADMIN_EMAILS – při přihlášení vždy admin">ADMIN_EMAILS</span>{% endif %}</th>
+        <td colspan="4">
+          <form method="post" action="/sprava/uzivatele/{{ u.id }}" class="actions" style="align-items:center">
+            {{ ui.csrf_field() }}
+            <label class="sr-only" for="n-{{ u.id }}">Jméno</label>
+            <input id="n-{{ u.id }}" type="text" name="name" value="{{ u.name }}" style="max-width: 14em">
+            <label class="sr-only" for="r-{{ u.id }}">Role</label>
+            <select id="r-{{ u.id }}" name="role" style="max-width: 11em">{% for r in ['reader', 'admin'] %}<option value="{{ r }}"{% if u.role == r %} selected{% endif %}>{{ USER_ROLE_LABELS[r] }}</option>{% endfor %}</select>
+            <label class="field-check"><input type="checkbox" name="active" value="1"{% if u.active %} checked{% endif %}> aktivní</label>
+            <span class="small muted">{{ u.last_login_at|datetime_cs if u.last_login_at else 'nikdy' }}</span>
+            <button class="btn" type="submit">Uložit</button>
+          </form>
+        </td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<details class="card">
+  <summary><strong>Přidat uživatele</strong></summary>
+  <form method="post" action="/sprava/uzivatele">
+    {{ ui.csrf_field() }}
+    <div class="form-grid">
+      {{ ui.field('email', 'E-mail', '', type='email', required=true, help='Musí být v doméně ' ~ domain ~ '.') }}
+      {{ ui.field('name', 'Jméno', '') }}
+      {{ ui.select('role', 'Role', [('reader', 'čtenář'), ('admin', 'administrátor')], 'reader') }}
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Přidat</button></div>
+  </form>
+</details>
+{% endblock %}

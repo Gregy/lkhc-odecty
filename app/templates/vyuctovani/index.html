@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block content %}
+{{ ui.page_header("Vyúčtování", "roční vyúčtování spotřeby po nájemcích a tarifech") }}
+
+<div class="table-wrap">
+  <table class="data">
+    <thead><tr><th scope="col">Název</th><th scope="col">Období</th><th scope="col">Stav</th><th scope="col">Finalizováno</th></tr></thead>
+    <tbody>
+      {% for s in items %}
+      <tr>
+        <th scope="row"><a href="/vyuctovani/{{ s.id }}">{{ s.name }}</a></th>
+        <td>{{ s.period_start|date_cs }} – {{ s.period_end|date_cs }}</td>
+        <td>{% if s.status == 'final' %}{{ ui.badge('finalizováno', 'success') }}{% if s.finalize_forced %} {{ ui.badge('vynuceně', 'warning') }}{% endif %}{% else %}{{ ui.badge('návrh', 'warning') }}{% endif %}</td>
+        <td>{{ s.finalized_at|date_cs if s.finalized_at else '–' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">Zatím žádné vyúčtování.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if current_user.is_admin %}
+<section class="card">
+  <h2 class="card-title">Nové vyúčtování</h2>
+  <form method="post" action="/vyuctovani">
+    {{ ui.csrf_field() }}
+    <div class="form-grid">
+      <div class="field">
+        <label for="f-year">Rok <span class="req" aria-hidden="true">*</span></label>
+        <input id="f-year" name="year" type="number" inputmode="numeric" min="2000" max="2100" value="{{ year }}" required
+          hx-get="/vyuctovani/hranice" hx-trigger="change, keyup changed delay:400ms" hx-target="#bounds-preview" hx-swap="outerHTML" hx-include="this">
+      </div>
+      {{ ui.field('name', 'Název', '', help='Výchozí „Vyúčtování ROK“.') }}
+      <div></div>
+      {{ ui.field('period_start', 'Vlastní začátek', '', type='date', help='Nepovinné – jinak 1. 1. zvoleného roku.') }}
+      {{ ui.field('period_end', 'Vlastní konec', '', type='date', help='Nepovinné – jinak 1. 1. dalšího roku.') }}
+      <div class="span-2">{{ ui.textarea('note', 'Poznámka', '', rows=2) }}</div>
+    </div>
+    {% include "vyuctovani/_bounds.html" %}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Vytvořit návrh</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{{ ui.page_header('Dávka fotek', 'Nahrajte fotky elektroměrů z galerie – čas se vezme z EXIF, rozpoznané hodnoty potvrdíte v kontrole.') }}
+
+{% if not current_user.is_admin %}
+{{ ui.alert_box('Nahrávat fotky může jen administrátor.', 'info') }}
+{% else %}
+<form method="post" action="/odecty/davka" enctype="multipart/form-data" class="card upload-form" data-batch-upload>
+  {{ ui.csrf_field() }}
+  <div class="field">
+    <label for="f-files">Fotky <span class="req" aria-hidden="true">*</span></label>
+    <input id="f-files" type="file" name="files" accept="image/jpeg,image/png,image/webp" multiple required>
+    <p class="field-help">JPEG/PNG/WebP, max {{ max_mb }} MB na fotku. Lze vybrat celou obchůzku najednou; fotky stejného elektroměru
+      pořízené do minuty po sobě se sloučí do série.</p>
+  </div>
+  {{ ui.field('reported_by', 'Nahlásil (nájemce)', '', help='Vyplňte u fotek, které poslal nájemce (např. „Novák (WhatsApp)“). Fotky bez EXIF času si v kontrole vyžádají datum.') }}
+  <div class="rc-actions"><button class="btn btn-primary" type="submit">Nahrát</button></div>
+  <div class="upload-progress" data-progress hidden>
+    <p><strong data-progress-summary></strong></p>
+    <ol class="upload-list" data-progress-list></ol>
+    <p data-progress-done hidden><a class="btn btn-primary" href="/odecty/kontrola">Pokračovat na kontrolu →</a></p>
+  </div>
+</form>
+{% if not extraction_on %}{{ ui.alert_box('Rozpoznávání hodnot není zapnuté – v kontrole hodnoty doplníte ručně podle fotky.', 'info') }}{% endif %}
+{% endif %}
+
+{% if recent %}
+<h2>Naposledy nahrané</h2>
+<div class="thumb-grid">
+  {% for p in recent %}<a href="/fotky/{{ p.id }}" class="thumb"><img src="/fotky/{{ p.id }}/nahled" alt="Fotka #{{ p.id }}" loading="lazy">
+    <span class="small">{{ p.taken_at|datetime_cs if p.taken_at else 'bez data' }}</span></a>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/capture.js') }}" defer></script>{% endblock %}

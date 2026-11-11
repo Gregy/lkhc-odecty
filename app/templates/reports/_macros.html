@@ -1,0 +1,70 @@
+{#-
+  Reports-phase macros. Import WITH CONTEXT:
+    {% import "reports/_macros.html" as rm with context %}
+-#}
+
+{# Snapshot-style value {value, quality, title} (settlement documents) with quality marker. #}
+{% macro qd(q, decimals=0, unit=false) -%}
+{%- if q is none -%}<span class="num muted">–</span>
+{%- else -%}
+{%- set neg = (q.value|float) < 0 -%}
+{%- set txt = (q.value|kwh(decimals)) if unit else (q.value|num(decimals)) -%}
+{%- if q.quality == 'exact' -%}<span class="num{% if neg %} negative{% endif %}">{{ txt }}</span>
+{%- else -%}<span class="num q-{{ q.quality }}{% if neg %} negative{% endif %}" title="{{ q.title }}" tabindex="0">{{ '≈?' if q.quality == 'provisional' else '≈' }}{{ txt }}</span>
+{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{# Quality badge from a quality string. #}
+{% macro qbadge(quality, title='') -%}
+{%- if quality == 'exact' -%}<span class="badge badge-success"{% if title %} title="{{ title }}"{% endif %}>přesně</span>
+{%- elif quality == 'estimated' -%}<span class="badge badge-warning"{% if title %} title="{{ title }}" tabindex="0"{% endif %}>≈ odhad</span>
+{%- else -%}<span class="badge badge-error"{% if title %} title="{{ title }}" tabindex="0"{% endif %}>≈? předběžně</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# Counter state at a boundary from a settlement document ({value, quality, method, title}). #}
+{% macro state(b, decimals=0) -%}
+{%- if b.value is none -%}<span class="num muted" title="{{ b.title }}">–</span>
+{%- elif b.quality == 'exact' -%}<span class="num" title="{{ b.title }}">{{ b.value|num(decimals) }}</span>
+{%- else -%}<span class="num q-{{ b.quality }}" title="{{ b.title }}" tabindex="0">{{ '≈?' if b.quality == 'provisional' else '≈' }}{{ b.value|num(decimals) }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# Legend explaining quality markers. Always shown next to computed numbers. #}
+{% macro quality_legend(extra='') -%}
+<p class="q-legend">
+  <span><span class="num">123</span> přesně (odečty na hranicích)</span>
+  <span><span class="num q-estimated">≈123</span> odhad – interpolace mezi odečty</span>
+  <span><span class="num q-provisional">≈?123</span> předběžné – extrapolace, pozdější odečet chybí</span>
+  <span class="muted no-print">Původ hodnoty ukáže najetí myší nebo klepnutí.</span>
+  {% if extra %}<span class="muted">{{ extra }}</span>{% endif %}
+</p>
+{%- endmacro %}
+
+{# Chart.js + charts.js loader (put into the page's `scripts` block). #}
+{% macro chart_scripts() -%}
+<script src="{{ url_for('static', path='vendor/chart-4.4.7.umd.min.js') }}" defer></script>
+<script src="{{ url_for('static', path='js/charts.js') }}" defer></script>
+{%- endmacro %}
+
+{# Tap/keyboard-friendly provenance popover for title'd quality values (no Chart.js needed). #}
+{% macro reports_scripts() -%}
+<script src="{{ url_for('static', path='js/charts.js') }}" defer></script>
+{%- endmacro %}
+
+{% macro reports_css() -%}
+<link rel="stylesheet" href="{{ url_for('static', path='css/reports.css') }}">
+{%- endmacro %}
+
+{# Freshness note for pages with aligned numbers. #}
+{% macro freshness(cov, today) -%}
+{%- if cov.last_reading -%}
+{%- set days = (today - cov.last_reading.date()).days -%}
+<p class="freshness{% if days > 45 %} stale{% endif %}">
+  Poslední odečet: <strong>{{ cov.last_reading|date_cs }}</strong>
+  {% if days > 0 %}(před {{ days }} {{ 'dnem' if days == 1 else 'dny' }}){% endif %}.
+  {% if cov.end %}Data hlavního elektroměru pokrývají období do {{ cov.end|date_cs }}; pozdější období by byla jen předběžná.{% endif %}
+</p>
+{%- endif -%}
+{%- endmacro %}

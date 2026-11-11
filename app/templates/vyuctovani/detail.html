@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "reports/_macros.html" as rm with context %}
+{% import "vyuctovani/_protocol.html" as proto with context %}
+{% block head %}{{ rm.reports_css() }}{% endblock %}
+{% block content %}
+{% call ui.page_header(s.name, dt(doc.start) ~ ' – ' ~ dt(doc.end) ~ ' · ' ~ MODE_LABELS.get(doc.mode, doc.mode)) %}
+  <a class="btn" href="/vyuctovani/{{ s.id }}/export.xlsx">Export XLSX</a>
+  <a class="btn" href="/vyuctovani/{{ s.id }}/tisk">Tisková verze</a>
+{% endcall %}
+
+<section class="card {{ 'status-final' if s.status == 'final' else 'status-draft' }}">
+  <p>
+    {% if s.status == 'final' %}{{ ui.badge('finalizováno', 'success') }}{% if s.finalize_forced %} {{ ui.badge('vynuceně s předběžnými hodnotami', 'warning') }}{% endif %}
+    {% else %}{{ ui.badge('návrh', 'warning') }}{% endif %}
+    {{ proto.status_line() }}
+  </p>
+  {% if s.status == 'final' %}
+  <p class="small muted">Zobrazené hodnoty pocházejí z uloženého snapshotu při finalizaci; pozdější opravy odečtů je nemění.</p>
+  {% if diffs %}
+  <div class="alert alert-warning small"><span>Aktuální data se od snapshotu liší (opravy nebo doplněné odečty po finalizaci):
+    {% for x in diffs %}{{ x.name }} {{ x.snapshot|num }} → {{ x.live|num }} kWh{% if not loop.last %}; {% endif %}{% endfor %}.
+    Pro přepočet je třeba vyúčtování znovu otevřít.</span></div>
+  {% endif %}
+  {% endif %}
+  {% if s.note %}<p>{{ s.note }}</p>{% endif %}
+</section>
+
+{% set check = doc.check %}
+{% if check.provisional or check.estimated %}
+<section class="card">
+  <h2 class="card-title">Kontrola hranic období</h2>
+  {% if check.provisional %}
+  <div class="alert alert-error"><span><strong>Předběžné stavy ({{ check.provisional|length }})</strong> – na hranici chybí pozdější odečet, hodnota je extrapolovaná.
+    {% if s.status == 'draft' %}Dokud nejsou doplněny odečty, finalizace je blokovaná (lze ji vědomě vynutit s poznámkou).{% endif %}</span></div>
+  <ul class="issues">{% for m in check.provisional %}<li>{{ m }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if check.estimated %}
+  <details{% if check.estimated|length <= 6 %} open{% endif %}>
+    <summary><strong>Odhadnuté stavy ({{ check.estimated|length }})</strong> – interpolace mezi skutečnými odečty; povoleno, protokol to u elektroměru uvádí.</summary>
+    <ul class="issues small">{% for m in check.estimated %}<li>{{ m }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2 class="card-title">Souhrn po obdobích (kWh)</h2>
+  <div class="table-wrap">
+    <table class="data sticky-first compact">
+      <thead>
+        <tr>
+          <th scope="col" rowspan="2">Období</th>
+          {% for t in doc.tenants %}<th scope="colgroup" colspan="3" class="num group-start"><a href="#protokol-{{ t.id }}">{{ ui.tenant(t) }}</a></th>{% endfor %}
+          <th scope="colgroup" colspan="2" class="num group-start">Hlavní</th>
+        </tr>
+        <tr>
+          {% for t in doc.tenants %}<th scope="col" class="num group-start">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Σ</th>{% endfor %}
+          <th scope="col" class="num group-start">T1</th><th scope="col" class="num">T2</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for per in doc.periods %}
+        {% set i = loop.index0 %}
+        <tr>
+          <th scope="row" class="nowrap">{{ per.label }}</th>
+          {% for t in doc.tenants %}
+          <td class="num group-start">{{ rm.qd(t.periods.T1[i]) }}</td><td class="num">{{ rm.qd(t.periods.T2[i]) }}</td><td class="num strong">{{ rm.qd(t.period_totals[i]) }}</td>
+          {% endfor %}
+          <td class="num group-start">{{ rm.qd(doc.period_main.T1[i]) }}</td><td class="num">{{ rm.qd(doc.period_main.T2[i]) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">Celkem</th>
+          {% for t in doc.tenants %}
+          <td class="num group-start">{{ rm.qd(t.totals.T1) }}</td><td class="num">{{ rm.qd(t.totals.T2) }}</td><td class="num">{{ rm.qd(t.total) }}</td>
+          {% endfor %}
+          <td class="num group-start">{{ rm.qd(doc.main.T1) }}</td><td class="num">{{ rm.qd(doc.main.T2) }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {{ rm.quality_legend("Zbytek = hlavní elektroměr − ostatní nájemci.") }}
+</section>
+
+<h2>Protokoly nájemců</h2>
+{% for p in protocols %}
+<details class="card" {% if loop.length <= 1 %}open{% endif %}>
+  <summary><strong>{{ ui.tenant(p.t) }}</strong> – {{ rm.qd(p.t.total, 0, true) }} {{ rm.qbadge(p.t.total.quality) }}</summary>
+  {{ proto.protocol(p, 3) }}
+  <p class="no-print"><a href="/vyuctovani/{{ s.id }}/tisk?najemce={{ p.t.id }}">Tisková verze protokolu</a></p>
+</details>
+{% endfor %}
+
+{% if current_user.is_admin %}
+<section class="card">
+  <h2 class="card-title">Akce</h2>
+  {% if s.status == 'draft' %}
+  <form method="post" action="/vyuctovani/{{ s.id }}/finalizovat" class="card">
+    {{ ui.csrf_field() }}
+    <h3>Finalizovat</h3>
+    <p class="small">Finalizace uloží snapshot výsledků; pozdější opravy odečtů se do něj nepropíšou.</p>
+    {% if not check.can_finalize %}
+      <div class="alert alert-warning small"><span>Některé stavy jsou předběžné. Finalizace je možná jen vědomým vynucením s poznámkou.</span></div>
+      {{ ui.checkbox('force', 'Rozumím, finalizovat i s předběžnými hodnotami') }}
+      {{ ui.textarea('note', 'Poznámka (povinná při vynucení)', '', rows=2) }}
+    {% else %}
+      {{ ui.textarea('note', 'Poznámka', '', rows=2) }}
+    {% endif %}
+    <button class="btn btn-primary" type="submit" data-confirm="Finalizovat vyúčtování a uložit snapshot?">Finalizovat</button>
+  </form>
+
+  <details class="card">
+    <summary><strong>Upravit návrh</strong></summary>
+    <form method="post" action="/vyuctovani/{{ s.id }}/upravit">
+      {{ ui.csrf_field() }}
+      <div class="form-grid">
+        {{ ui.field('name', 'Název', s.name, required=true) }}
+        {{ ui.field('period_start', 'Začátek', s.period_start.isoformat(), type='date', required=true) }}
+        {{ ui.field('period_end', 'Konec', s.period_end.isoformat(), type='date', required=true) }}
+        <div class="span-2">{{ ui.textarea('note', 'Poznámka', s.note, rows=2) }}</div>
+      </div>
+      <button class="btn" type="submit">Uložit</button>
+    </form>
+  </details>
+  <form method="post" action="/vyuctovani/{{ s.id }}/smazat" class="inline-form">
+    {{ ui.csrf_field() }}
+    <button class="btn btn-danger" type="submit" data-confirm="Smazat návrh vyúčtování?">Smazat návrh</button>
+  </form>
+  {% else %}
+  <form method="post" action="/vyuctovani/{{ s.id }}/znovu-otevrit">
+    {{ ui.csrf_field() }}
+    <p class="small">Znovuotevření zahodí snapshot (záznam zůstane v auditním logu) a vyúčtování se bude znovu počítat z aktuálních odečtů.</p>
+    {{ ui.textarea('note', 'Důvod znovuotevření (povinný)', '', rows=2) }}
+    <button class="btn btn-danger" type="submit" data-confirm="Opravdu znovu otevřít finalizované vyúčtování?">Znovu otevřít</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}{{ rm.reports_scripts() }}{% endblock %}

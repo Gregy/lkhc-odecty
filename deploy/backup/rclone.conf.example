@@ -1,0 +1,28 @@
+# /srv/lkhc-odecty/backup/rclone/rclone.conf - SECRET (OAuth refresh token, crypt passwords).
+# Directory 0700, file 0600, owner deploy. Created by `rclone config` (deploy/README.md, section
+# "Zálohy na Google Drive"); this file only shows what ends up in it.
+
+# Recommended: user OAuth with the narrow drive.file scope (rclone sees only files it created itself).
+[gdrive]
+type = drive
+client_id = 1234567890-abc.apps.googleusercontent.com
+client_secret = GOCSPX-...
+scope = drive.file
+token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"..."}
+
+# Alternative: a service account that is a member of a Workspace shared drive.
+# [gdrive]
+# type = drive
+# scope = drive
+# service_account_file = /config/rclone/sa.json     # path INSIDE the rclone container
+# team_drive = 0ABCdefGHIjklUk9PVA                   # shared drive ID (from its URL)
+
+# Optional client-side encryption on top of [gdrive] (BACKUP_REMOTE=gdrive-crypt:).
+# The two passwords are needed for every restore: keep them outside the VPS too.
+# [gdrive-crypt]
+# type = crypt
+# remote = gdrive:lkhc-odecty-zalohy-crypt
+# filename_encryption = standard
+# directory_name_encryption = true
+# password = <rclone obscure ...>
+# password2 = <rclone obscure ...>

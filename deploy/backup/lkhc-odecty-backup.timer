@@ -1,0 +1,14 @@
+# /etc/systemd/system/lkhc-odecty-backup.timer - nightly at 03:30 local time (Europe/Prague).
+# 03:30 exists exactly once also on both daylight-saving switch nights. Persistent=true runs a
+# missed backup right after the VPS boots.
+#   sudo systemctl enable --now lkhc-odecty-backup.timer ; systemctl list-timers lkhc-odecty-backup
+[Unit]
+Description=LKHC Odečty: nightly off-site backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

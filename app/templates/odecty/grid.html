@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% from "odecty/_cellmacro.html" import cell %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{% set is_admin = current_user.is_admin %}
+{% call ui.page_header('Odečty', 'Stavy elektroměrů po dnech (' ~ range_title ~ '). R = ručně, F = z fotky, I = import, D = dálkově.') %}
+  {% if is_admin %}<a class="btn btn-primary" href="/odecty/novy">+ Odečet (libovolné datum)</a>{% endif %}
+  <a class="btn" href="/odecty/historie">Historie změn</a>
+{% endcall %}
+
+<form method="get" class="filters">
+  <label>Období
+    <select name="rok" onchange="this.form.submit()">
+      <option value=""{% if not rok %} selected{% endif %}>posledních 13 měsíců</option>
+      {% for y in years %}<option value="{{ y }}"{% if rok == y|string %} selected{% endif %}>{{ y }}</option>{% endfor %}
+      <option value="vse"{% if rok == 'vse' %} selected{% endif %}>vše</option>
+    </select></label>
+  <label><input type="checkbox" name="odebrane" value="1"{% if odebrane %} checked{% endif %} onchange="this.form.submit()"> i odebrané elektroměry</label>
+  <noscript><button class="btn" type="submit">Zobrazit</button></noscript>
+</form>
+
+{% if is_admin %}<p class="muted small">Kliknutím na buňku hodnotu upravíte, smažete nebo doplníte (každá změna se zapisuje do historie).</p>{% endif %}
+<div id="cell-editor" class="cell-editor" aria-live="polite"></div>
+
+<div class="table-wrap grid-wrap">
+<table class="data readings-grid">
+  <thead>
+    <tr>
+      <th rowspan="2" class="sticky-col" scope="col">Datum</th>
+      {% for g in groups %}
+      <th colspan="{{ g.span }}" scope="colgroup" class="gh{% if not g.active %} muted{% endif %}" title="{{ g.serial }}">
+        {{ g.point }}<br><span class="small muted">{{ g.serial }}</span></th>
+      {% endfor %}
+    </tr>
+    <tr>{% for c in columns %}<th scope="col" class="num">{{ c.register }}</th>{% endfor %}</tr>
+  </thead>
+  <tbody>
+    {% for d in days %}
+    <tr id="d-{{ d.isoformat() }}">
+      <th scope="row" class="sticky-col">{{ d|date_cs }}</th>
+      {% for c in columns %}{{ cell(rows[d].get((c.meter_id, c.register)), c.meter_id, c.register, d, is_admin, source_short) }}{% endfor %}
+    </tr>
+    {% else %}
+    <tr><td colspan="{{ columns|length + 1 }}" class="muted">Žádné odečty v tomto období.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/capture.js') }}" defer></script>{% endblock %}

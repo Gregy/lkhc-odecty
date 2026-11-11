@@ -1,0 +1,92 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% import "sprava/_forms.html" as af with context %}
+{% block sprava %}
+<p><a href="/sprava/mista">← všechna místa</a> · <a href="/mista/{{ p.id }}">přehled místa</a></p>
+<section class="card">
+  <h2 class="card-title">Měřicí místo</h2>
+  <form method="post" action="/sprava/mista/{{ p.id }}">
+    {{ ui.csrf_field() }}
+    {% include "sprava/_point_form.html" %}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Uložit</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h2 class="card-title">Elektroměry</h2>
+  <div class="table-wrap">
+    <table class="data compact">
+      <thead><tr><th scope="col">Výr. číslo</th><th scope="col">Registry</th><th scope="col">Instalován</th><th scope="col">Odebrán</th><th scope="col" class="num">Míst / des.</th><th scope="col">Zdroj</th><th scope="col">Poslední odečet</th><th scope="col" class="num">Odečtů</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for m in meters %}
+        <tr{% if m.removed_on %} class="muted"{% endif %}>
+          <th scope="row">{{ m.serial }}</th>
+          <td>{{ (m.registers or ['T1'])|join(' / ') }}</td>
+          <td>{{ m.installed_on|date_cs if m.installed_on else '–' }}</td>
+          <td>{{ m.removed_on|date_cs if m.removed_on else '–' }}</td>
+          <td class="num">{{ m.digits }} / {{ m.decimals_shown }}</td>
+          <td>{{ SOURCE_LABELS.get(m.source_type, m.source_type) }}</td>
+          <td class="small">{% for reg in m.registers or ['T1'] %}{% set r = last.get((m.id, reg)) %}{% if r %}{{ reg }}: {{ r.value|num(m.decimals_shown) }} ({{ r.taken_at|date_cs }}){% if not loop.last %}<br>{% endif %}{% endif %}{% endfor %}</td>
+          <td class="num">{{ n_read.get(m.id, 0) }}</td>
+          <td><a href="/sprava/elektromery/{{ m.id }}">Upravit</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="muted">Místo zatím nemá elektroměr.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% set active_meters = meters|rejectattr('removed_on')|list %}
+{% if active_meters %}
+<details class="card" id="vymena">
+  <summary><strong>Výměna elektroměru</strong></summary>
+  <form method="post" action="/sprava/mista/{{ p.id }}/vymena">
+    {{ ui.csrf_field() }}
+    <p class="field-help">Starý elektroměr dostane datum odebrání, nový se k témuž datu nainstaluje. Spotřeba místa se dál sčítá přes oba elektroměry. Konečný stav starého a počáteční stav nového se zapíší jako odečty k datu výměny.</p>
+    <div class="form-grid">
+      <div class="field">
+        <label for="f-old_meter_id">Vyměňovaný elektroměr</label>
+        <select id="f-old_meter_id" name="old_meter_id">{% for m in active_meters %}<option value="{{ m.id }}">{{ m.serial }} ({{ (m.registers or ['T1'])|join('/') }})</option>{% endfor %}</select>
+      </div>
+      {{ ui.field('date', 'Datum výměny', today.isoformat(), type='date', required=true) }}
+      {{ ui.field('old_final_T1', 'Konečný stav starého – T1', '', type='number', help='Nepovinné; prázdné = bez odečtu.') }}
+      {{ ui.field('old_final_T2', 'Konečný stav starého – T2', '', type='number', help='Jen pokud starý měřák má T2.') }}
+    </div>
+    <h3>Nový elektroměr</h3>
+    {{ af.meter_fields(none, 'new_', sources, hide_dates=true) }}
+    <div class="form-grid">
+      {{ ui.field('new_initial_T1', 'Počáteční stav nového – T1', '0', type='number') }}
+      {{ ui.field('new_initial_T2', 'Počáteční stav nového – T2', '0', type='number', help='Použije se jen pokud má nový měřák registr T2.') }}
+      <div class="span-2">{{ ui.field('note', 'Poznámka k odečtům', '') }}</div>
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit" data-confirm="Zaznamenat výměnu elektroměru?">Zaznamenat výměnu</button></div>
+  </form>
+</details>
+{% endif %}
+
+<details class="card">
+  <summary><strong>Přidat elektroměr</strong> (nové místo nebo druhý měřák na místě)</summary>
+  <form method="post" action="/sprava/mista/{{ p.id }}/elektromery">
+    {{ ui.csrf_field() }}
+    {{ af.meter_fields(none, '', sources) }}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Přidat</button></div>
+  </form>
+</details>
+
+<section class="card">
+  <h2 class="card-title">Alokace na nájemce</h2>
+  {% if allocs %}
+  <ul class="issues">{% for a in allocs %}{% set t = tenants.get(a.tenant_id) %}<li><a href="/sprava/alokace/{{ a.id }}">{{ t.name if t else '?' }}</a> × {{ a.factor|num(3) }}{% if a.valid_from or a.valid_to %} ({{ ('od ' ~ a.valid_from|date_cs) if a.valid_from }} {{ ('do ' ~ a.valid_to|date_cs) if a.valid_to }}){% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">Bez alokace – spotřeba spadá do zbytku.</p>{% endif %}
+  <p><a href="/sprava/alokace">Spravovat alokace</a></p>
+</section>
+
+{% if not meters %}
+<form method="post" action="/sprava/mista/{{ p.id }}/smazat" class="inline-form">
+  {{ ui.csrf_field() }}
+  <button class="btn btn-danger" type="submit" data-confirm="Smazat měřicí místo {{ p.name }}?">Smazat místo</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block content %}
+{{ ui.page_header(page_title) }}
+<section class="card stub">
+  <p><span class="badge badge-info">připravuje se</span></p>
+  {% if description %}<p>{{ description }}</p>{% endif %}
+  <p class="muted">Tato stránka se teprve připravuje.</p>
+</section>
+{% endblock %}

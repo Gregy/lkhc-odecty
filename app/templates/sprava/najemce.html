@@ -1,0 +1,26 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<section class="card">
+  <form method="post" action="/sprava/najemci/{{ t.id }}">
+    {{ ui.csrf_field() }}
+    {% include "sprava/_tenant_form.html" %}
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Uložit</button>
+      <a class="btn" href="/sprava/najemci">Zpět</a>
+      <a class="btn" href="/najemci/{{ t.id }}">Spotřeba nájemce</a>
+    </div>
+  </form>
+</section>
+<section class="card">
+  <h2 class="card-title">Alokace</h2>
+  {% if allocs %}
+  <ul class="issues">{% for a in allocs %}<li><a href="/sprava/alokace/{{ a.id }}">{{ a.meter_point.name }}</a> × {{ a.factor|num(3) }}{% if a.valid_from or a.valid_to %} ({{ ('od ' ~ a.valid_from|date_cs) if a.valid_from }} {{ ('do ' ~ a.valid_to|date_cs) if a.valid_to }}){% endif %}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">Žádné alokace.</p>{% endif %}
+  <p><a href="/sprava/alokace">Spravovat alokace</a></p>
+</section>
+<form method="post" action="/sprava/najemci/{{ t.id }}/smazat" class="inline-form">
+  {{ ui.csrf_field() }}
+  <button class="btn btn-danger" type="submit" data-confirm="Smazat nájemce {{ t.name }}?"{% if allocs %} disabled title="Nájemce má alokace"{% endif %}>Smazat nájemce</button>
+</form>
+{% endblock %}

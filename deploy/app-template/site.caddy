@@ -1,0 +1,6 @@
+# /srv/proxy/caddy/sites/myapp.example.org.caddy  (DNS A/AAAA of the name -> the VPS first)
+# then: /srv/proxy/reload.sh
+myapp.example.org {
+	import common
+	reverse_proxy myapp:80
+}

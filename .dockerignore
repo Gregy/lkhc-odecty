@@ -1,0 +1,23 @@
+# Allow-list: only what the image needs. Everything else stays out of the build context –
+# in particular private data: private/ (spreadsheet, import mapping, notes), examples/ (meter photos),
+# data/ (DB, photos, backups), .env, the local .venv and caches.
+*
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!alembic
+!app
+!docker-entrypoint.sh
+
+# never, even inside the allowed directories
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.xlsx
+private
+examples
+data
+.venv

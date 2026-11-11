@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body_class %}page-login{% endblock %}
+{% block content %}
+<section class="card login-card">
+  <h1>LKHC Odečty</h1>
+  <p class="muted">Evidence odečtů elektroměrů na letišti.</p>
+  {% if google_configured %}
+  <a class="btn btn-primary btn-block" href="/auth/google?next={{ next|urlencode }}">Přihlásit se účtem Google</a>
+  <p class="field-help">Přístup mají jen účty domény <strong>{{ allowed_domain }}</strong>.</p>
+  {% else %}
+  <div class="alert alert-warning">
+    Přihlášení přes Google není nakonfigurováno. Nastavte <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> a <code>ALLOWED_DOMAIN</code>,
+    případně pro lokální vývoj <code>AUTH_DEV_BYPASS=1</code>.
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

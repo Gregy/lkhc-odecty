@@ -1,0 +1,47 @@
+# LKHC Odečty - single-host run: local testing, or a server where your own reverse proxy runs on the
+# host. For the production VPS layout (shared Caddy, no host ports, deploy/rollback, backups) use
+# deploy/lkhc-odecty/compose.yml and deploy/README.md instead.
+#
+#   cp .env.example .env   # fill in SECRET_KEY, BASE_URL, GOOGLE_*, ALLOWED_DOMAIN, ADMIN_EMAILS, ...
+#   docker compose up -d --build
+#   docker compose logs -f app
+#
+# The app listens only on 127.0.0.1:8000 of the host; a reverse proxy on the host terminates TLS and
+# forwards to it. Example Caddyfile (Caddy sets X-Forwarded-Proto/-For itself):
+#
+#   odecty.example.org {
+#       request_body {
+#           max_size 100MB         # one photo per request (max 30 MB) + form fields
+#       }
+#       reverse_proxy 127.0.0.1:8000
+#   }
+#
+# nginx: proxy_pass http://127.0.0.1:8000; proxy_set_header Host $host;
+#        proxy_set_header X-Forwarded-Proto $scheme; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#        client_max_body_size 100m;
+
+services:
+  app:
+    build: .
+    image: lkhc-odecty:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATA_DIR: /data
+      TZ: Europe/Prague
+      # Requests reach the container only from the reverse proxy (published on 127.0.0.1 only), so its
+      # X-Forwarded-Proto is trusted; this makes generated URLs https. Narrow it if you expose the port.
+      FORWARDED_ALLOW_IPS: "*"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # DB (app.db), photos/ and backups/ live here. A named volume gets the right owner (uid 10001)
+      # automatically; for a bind mount instead use e.g. ./data:/data and `sudo chown -R 10001:10001 ./data`.
+      - lkhc-data:/data
+    # optional: a local vision model for photo extraction (see README, "Ollama")
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+volumes:
+  lkhc-data:

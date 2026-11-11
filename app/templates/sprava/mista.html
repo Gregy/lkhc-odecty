@@ -1,0 +1,38 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<section class="card">
+  <h2 class="card-title">Měřicí místa a pořadí obchůzky</h2>
+  <form method="post" action="/sprava/mista/poradi">
+    {{ ui.csrf_field() }}
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th scope="col" class="num">Pořadí</th><th scope="col">Místo</th><th scope="col">Role</th><th scope="col">Elektroměry</th><th scope="col">Stav</th><th scope="col"></th></tr></thead>
+        <tbody>
+          {% for p in points %}
+          <tr{% if not p.active %} class="muted"{% endif %}>
+            <td class="num"><label class="sr-only" for="o-{{ p.id }}">Pořadí {{ p.name }}</label><input class="input-narrow" id="o-{{ p.id }}" type="number" name="order_{{ p.id }}" value="{{ p.sort_order }}" step="1" inputmode="numeric"></td>
+            <th scope="row"><a href="/sprava/mista/{{ p.id }}">{{ p.name }}</a></th>
+            <td>{{ ROLE_LABELS.get(p.role, p.role) }}</td>
+            <td>{% for m in p.meters %}<a href="/sprava/elektromery/{{ m.id }}"{% if m.removed_on %} class="muted"{% endif %}>{{ m.serial }}</a>{% if m.removed_on %} <span class="small muted">(odebrán)</span>{% endif %}{% if not loop.last %}, {% endif %}{% else %}<span class="muted">žádný</span>{% endfor %}</td>
+            <td>{{ 'aktivní' if p.active else 'neaktivní' }}</td>
+            <td><a href="/sprava/mista/{{ p.id }}">Upravit</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="field-help">Pořadí určuje sled míst v obchůzce i řazení v přehledech (menší číslo dřív).</p>
+    <button class="btn btn-primary" type="submit">Uložit pořadí</button>
+  </form>
+</section>
+<details class="card">
+  <summary><strong>Nové měřicí místo</strong></summary>
+  <form method="post" action="/sprava/mista">
+    {{ ui.csrf_field() }}
+    {% set p = none %}
+    {% include "sprava/_point_form.html" %}
+    <div class="form-actions"><button class="btn btn-primary" type="submit">Vytvořit</button></div>
+  </form>
+</details>
+{% endblock %}

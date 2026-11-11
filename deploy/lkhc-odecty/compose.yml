@@ -1,0 +1,61 @@
+# LKHC Odečty - production compose project in /srv/lkhc-odecty (behind the shared Caddy in /srv/proxy).
+#
+#   /srv/lkhc-odecty/compose.yml           this file (managed: deploy.sh copies it from the repo)
+#   /srv/lkhc-odecty/compose.override.yml  optional local changes (compose loads it automatically)
+#   /srv/lkhc-odecty/.env                  configuration + secrets, mode 0600 (from env.production)
+#
+# No host ports: Caddy reaches the app over the external "proxy" network as lkhc-odecty:8000.
+# The image tag "live" is set by deploy.sh (it also keeps "previous" for rollback); there is no
+# registry, so compose must never try to pull it. For local development use ../../docker-compose.yml.
+
+name: lkhc-odecty
+
+services:
+  app:
+    image: lkhc-odecty:live
+    pull_policy: never
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DATA_DIR: /data
+      # Trust X-Forwarded-Proto/-For only from the Caddy container (fixed IP on the proxy network).
+      FORWARDED_ALLOW_IPS: ${PROXY_IP:-10.250.0.2}
+    volumes:
+      - data:/data # app.db (SQLite, WAL), photos/, backups/
+    networks:
+      proxy:
+        aliases: [lkhc-odecty] # the name used in /srv/proxy/caddy/sites/lkhc-odecty.caddy
+    # Small VPS (1.7 GB RAM, no swap), more apps later: cap each container. The app idles at
+    # ~130 MB; decoding a large photo (up to 60 MP) briefly needs a few hundred MB more.
+    mem_limit: 768m
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s # migrations run before uvicorn starts
+      start_interval: 2s # check often while starting, so `up --wait` returns quickly
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+    # optional: a local vision model on the host (see README, "Ollama")
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+
+volumes:
+  data:
+    name: ${DATA_VOLUME:-lkhc-odecty-data} # fixed name: backup.sh / restore.sh mount it directly
+
+networks:
+  proxy:
+    external: true

@@ -1,0 +1,68 @@
+{% extends "sprava/_base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block sprava %}
+<p class="muted small">Alokace určuje, kterému nájemci se počítá spotřeba měřicího místa: nájemce = Σ koeficient × spotřeba místa v době platnosti.
+  Platnost „od“ včetně, „do“ bez (prázdné = neomezeně). Zbytkový nájemce alokace nepotřebuje – dostane hlavní elektroměr minus ostatní.</p>
+{% if unallocated %}
+<div class="alert alert-info small"><span>Podružná místa bez alokace (spadají do zbytku): {% for p in unallocated %}{{ p.name }}{% if not loop.last %}, {% endif %}{% endfor %}.</span></div>
+{% endif %}
+<div class="table-wrap">
+  <table class="data compact">
+    <thead><tr><th scope="col">Místo</th><th scope="col">Nájemce</th><th scope="col" class="num">Koeficient</th><th scope="col">Platnost od</th><th scope="col">Platnost do</th><th scope="col">Poznámka</th><th scope="col"></th></tr></thead>
+    <tbody>
+      {% for x in allocs %}
+      {% set current = (not x.valid_from or x.valid_from <= today) and (not x.valid_to or today < x.valid_to) %}
+      <tr{% if not current %} class="muted"{% endif %}{% if a and a.id == x.id %} aria-current="true"{% endif %}>
+        <th scope="row">{{ x.meter_point.name }}</th>
+        <td>{{ ui.tenant(x.tenant) }}</td>
+        <td class="num">{{ x.factor|num(3) }}</td>
+        <td>{{ x.valid_from|date_cs if x.valid_from else '–' }}</td>
+        <td>{{ x.valid_to|date_cs if x.valid_to else '–' }}</td>
+        <td class="small">{{ x.note }}{% if not current %} <span class="badge badge-muted">neplatí dnes</span>{% endif %}</td>
+        <td class="nowrap"><a href="/sprava/alokace/{{ x.id }}#formular">Upravit</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">Žádné alokace.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<section class="card" id="formular">
+  <h2 class="card-title">{{ 'Upravit alokaci' if a else 'Nová alokace' }}</h2>
+  <form method="post" action="{{ '/sprava/alokace/' ~ a.id if a else '/sprava/alokace' }}">
+    {{ ui.csrf_field() }}
+    <div class="form-grid">
+      <div class="field">
+        <label for="f-meter_point_id">Měřicí místo <span class="req" aria-hidden="true">*</span></label>
+        <select id="f-meter_point_id" name="meter_point_id" required>
+          <option value="">– vyberte –</option>
+          {% for p in points %}<option value="{{ p.id }}"{% if a and a.meter_point_id == p.id %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-tenant_id">Nájemce <span class="req" aria-hidden="true">*</span></label>
+        <select id="f-tenant_id" name="tenant_id" required>
+          <option value="">– vyberte –</option>
+          {% for t in tenants %}<option value="{{ t.id }}"{% if a and a.tenant_id == t.id %} selected{% endif %}>{{ t.name }}{% if t.is_remainder %} (zbytek){% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      {{ ui.field('factor', 'Koeficient', (a.factor|num(3)) if a else '1', help='1 = celá spotřeba; 0,5 = polovina; záporný = odečítá se.') }}
+      <div></div>
+      {{ ui.field('valid_from', 'Platnost od (včetně)', a.valid_from.isoformat() if a and a.valid_from else '', type='date') }}
+      {{ ui.field('valid_to', 'Platnost do (bez)', a.valid_to.isoformat() if a and a.valid_to else '', type='date') }}
+      <div class="span-2">{{ ui.field('note', 'Poznámka', a.note if a else '') }}</div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">{{ 'Uložit' if a else 'Přidat' }}</button>
+      {% if a %}<a class="btn" href="/sprava/alokace">Zrušit</a>{% endif %}
+    </div>
+  </form>
+  {% if a %}
+  <form method="post" action="/sprava/alokace/{{ a.id }}/smazat" class="inline-form">
+    {{ ui.csrf_field() }}
+    <button class="btn btn-danger" type="submit" data-confirm="Smazat alokaci?">Smazat alokaci</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

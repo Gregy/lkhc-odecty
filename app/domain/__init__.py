@@ -1,0 +1,110 @@
+"""Pure calculation modules (no DB access).
+
+- ``aligned``: PRIMARY mode - common period boundaries, value_at with quality.
+- ``interpolation``: pluggable Interpolator strategies (linear, profile).
+- ``consumption``: register deltas (rollover) and the raw per-day table (sheet oracle).
+- ``allocation``: tenant allocation (aligned with quality, and raw).
+- ``anomalies``: anomaly detection, plausibility checks, expected range, staleness.
+"""
+
+from app.domain.aligned import (
+    QZERO,
+    BoundaryValue,
+    MeterSeries,
+    Provenance,
+    Quality,
+    QValue,
+    RegisterSeries,
+    date_boundaries,
+    meter_aligned,
+    month_boundaries,
+    point_aligned,
+    point_consumption,
+    qsum,
+    value_at,
+    worst,
+)
+from app.domain.allocation import (
+    AlignedAllocation,
+    AllocationResult,
+    AllocationRule,
+    ControlBalance,
+    TenantRef,
+    allocate,
+    allocate_aligned,
+    control_balance,
+    validity_fraction,
+    validity_window,
+)
+from app.domain.anomalies import (
+    Anomaly,
+    ExpectedRange,
+    PlausibilityIssue,
+    Staleness,
+    check_reading,
+    detect_anomalies,
+    expected_range,
+    staleness,
+    typical_daily_rate,
+)
+from app.domain.consumption import (
+    Delta,
+    Period,
+    PeriodCell,
+    ReadingPoint,
+    period_consumption,
+    periods_from_dates,
+    register_delta,
+    sum_optional,
+)
+from app.domain.interpolation import LINEAR, CumulativeProfile, Interpolator, LinearInterpolator, ProfileInterpolator
+
+__all__ = [
+    "LINEAR",
+    "QZERO",
+    "AlignedAllocation",
+    "AllocationResult",
+    "AllocationRule",
+    "Anomaly",
+    "BoundaryValue",
+    "ControlBalance",
+    "CumulativeProfile",
+    "Delta",
+    "ExpectedRange",
+    "Interpolator",
+    "LinearInterpolator",
+    "MeterSeries",
+    "Period",
+    "PeriodCell",
+    "PlausibilityIssue",
+    "ProfileInterpolator",
+    "Provenance",
+    "QValue",
+    "Quality",
+    "ReadingPoint",
+    "RegisterSeries",
+    "Staleness",
+    "TenantRef",
+    "allocate",
+    "allocate_aligned",
+    "check_reading",
+    "control_balance",
+    "date_boundaries",
+    "detect_anomalies",
+    "expected_range",
+    "meter_aligned",
+    "month_boundaries",
+    "period_consumption",
+    "periods_from_dates",
+    "point_aligned",
+    "point_consumption",
+    "qsum",
+    "register_delta",
+    "staleness",
+    "sum_optional",
+    "typical_daily_rate",
+    "validity_fraction",
+    "validity_window",
+    "value_at",
+    "worst",
+]

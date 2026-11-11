@@ -1,0 +1,14 @@
+{#- Grid cell for one meter × register × day. r: Reading or none. -#}
+{% macro cell(r, mid, reg, day, is_admin, source_short, oob=false) -%}
+<td id="c-{{ mid }}-{{ reg }}-{{ day.isoformat() }}" class="num gcell{% if r and r.status == 'pending' %} pending{% endif %}{% if is_admin %} editable{% endif %}"
+  {%- if oob %} hx-swap-oob="true"{% endif %}
+  {%- if is_admin %} hx-get="/odecty/bunka?meter_id={{ mid }}&register={{ reg }}&den={{ day.isoformat() }}" hx-target="#cell-editor" hx-swap="innerHTML" tabindex="0" role="button" aria-label="Upravit {{ reg }} {{ day|date_cs }}"{% endif %}>
+  {%- if r -%}
+    {%- set s = r.value|string -%}
+    {%- set dec = (s.split('.')[1].rstrip('0')|length) if '.' in s else 0 -%}
+    <span title="{{ {'manual': 'ručně', 'photo': 'z fotky', 'import': 'import', 'live': 'dálkově'}.get(r.source, r.source) }}{% if r.reported_by %} · nahlásil {{ r.reported_by }}{% endif %}{% if r.status == 'pending' %} · NEPOTVRZENO{% endif %}{% if r.note %} · {{ r.note }}{% endif %}">{{ r.value|num(dec) }}</span>
+    <sup class="src src-{{ r.source }}">{{ source_short.get(r.source, '?') }}</sup>
+    {%- if r.photo_id %}<a class="photo-link" href="/fotky/{{ r.photo_id }}" title="Fotka #{{ r.photo_id }}" onclick="event.stopPropagation()">📷</a>{% endif -%}
+  {%- endif -%}
+</td>
+{%- endmacro %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{% call ui.page_header('Fotky', total ~ ' fotek') %}
+  <a class="btn" href="/odecty/davka">Nahrát</a><a class="btn" href="/odecty/kontrola">Kontrola</a>
+{% endcall %}
+<nav class="tabs" aria-label="Filtr">
+  {% for key, label in [('vse', 'vše'), ('new', 'ke kontrole'), ('confirmed', 'potvrzené'), ('discarded', 'zahozené'), ('queued', 've frontě rozpoznávání'), ('failed', 'chyba rozpoznání')] %}
+  <a href="?stav={{ key }}"{% if stav == key %} aria-current="page"{% endif %}>{{ label }}{% if counts.get(key) %} ({{ counts[key] }}){% endif %}</a>
+  {% endfor %}
+</nav>
+<div class="thumb-grid">
+  {% for p in photos %}
+  <a href="/fotky/{{ p.id }}" class="thumb thumb-{{ p.review_status }}">
+    <img src="/fotky/{{ p.id }}/nahled" alt="Fotka #{{ p.id }}" loading="lazy">
+    <span class="small"><strong>#{{ p.id }}</strong> {{ p.taken_at|datetime_cs if p.taken_at else 'bez data' }}</span>
+    <span class="small">
+      {{ ui.badge(labels.review[p.review_status], {'new': 'warning', 'confirmed': 'success', 'discarded': 'muted'}[p.review_status]) }}
+      {% if p.extraction_status in ('queued', 'failed') %}{{ ui.badge(labels.extraction[p.extraction_status], 'info' if p.extraction_status == 'queued' else 'error') }}{% endif %}
+      {% if p.meter_id and meters.get(p.meter_id) %}<span class="muted">{{ meters[p.meter_id].serial }}</span>{% endif %}
+    </span>
+  </a>
+  {% else %}
+  <p class="muted">Žádné fotky.</p>
+  {% endfor %}
+</div>
+{% if pages > 1 %}
+<p class="pager">{% if strana > 1 %}<a href="?stav={{ stav }}&strana={{ strana - 1 }}">← předchozí</a>{% endif %}
+  strana {{ strana }} / {{ pages }}
+  {% if strana < pages %}<a href="?stav={{ stav }}&strana={{ strana + 1 }}">další →</a>{% endif %}</p>
+{% endif %}
+{% endblock %}

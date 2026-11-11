@@ -1,0 +1,3 @@
+<article class="card review-card is-done" role="status"{% if card %} id="karta-{{ card.key }}"{% endif %}>
+  <p>✓ {{ message }}{% if card %} <a href="/odecty">Zobrazit v odečtech</a>{% endif %}</p>
+</article>

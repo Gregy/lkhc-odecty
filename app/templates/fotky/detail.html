@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{% call ui.page_header('Fotka #' ~ photo.id, photo.original_filename) %}
+  {% if photo.review_status == 'new' %}<a class="btn btn-primary" href="/odecty/kontrola#karta-{{ photo.series_id or ('p' ~ photo.id) }}">Do kontroly</a>{% endif %}
+  <a class="btn" href="/fotky/{{ photo.id }}/soubor" target="_blank" rel="noopener">Originál</a>
+{% endcall %}
+<div class="photo-detail">
+  <div class="pd-image">
+    <div class="inline-viewer" data-inline-viewer>
+      <div class="viewer-tools">
+        <button type="button" class="btn" data-viewer-act="rotl" aria-label="Otočit doleva">⟲</button>
+        <button type="button" class="btn" data-viewer-act="rotr" aria-label="Otočit doprava">⟳</button>
+        <button type="button" class="btn" data-viewer-act="out" aria-label="Oddálit">−</button>
+        <button type="button" class="btn" data-viewer-act="in" aria-label="Přiblížit">+</button>
+        <button type="button" class="btn" data-viewer-act="reset">1:1</button>
+      </div>
+      <div class="viewer-stage" data-viewer-stage><img src="/fotky/{{ photo.id }}/soubor" alt="Fotka #{{ photo.id }}" data-viewer-img draggable="false"></div>
+    </div>
+  </div>
+  <div class="pd-info">
+    <section class="card">
+      <h2>Údaje</h2>
+      <dl class="kv">
+        <dt>Pořízeno</dt><dd>{% if photo.taken_at %}{{ photo.taken_at|datetime_cs }}{% else %}<span class="badge badge-warning">neznámé</span>{% endif %}
+          {% if photo.exif_taken_at %}<span class="muted small">(EXIF)</span>{% elif photo.taken_at and photo.source == 'walk' %}<span class="muted small">(čas telefonu při focení)</span>{% endif %}
+          {% if suggested and not photo.exif_taken_at %}<br><span class="small muted">návrh z názvu souboru: {{ suggested.value|date_cs }}{% if suggested.source == 'whatsapp' %} (WhatsApp){% endif %}</span>{% endif %}</dd>
+        <dt>Zdroj</dt><dd>{{ labels.source.get(photo.source, photo.source) }}{% if photo.uploaded_by %} · {{ photo.uploaded_by.display_name }}{% endif %} · nahráno {{ photo.uploaded_at|datetime_cs }}</dd>
+        {% if photo.reported_by %}<dt>Nahlásil</dt><dd>{{ photo.reported_by }}</dd>{% endif %}
+        <dt>Kontrola</dt><dd>{{ labels.review[photo.review_status] }}</dd>
+        <dt>Rozpoznání</dt><dd>{{ labels.extraction[photo.extraction_status] }}{% if photo.extraction_model %} · {{ photo.extraction_model }}{% endif %}{% if photo.extracted_at %} · {{ photo.extracted_at|datetime_cs }}{% endif %}
+          {% if photo.extraction_error %}<br><span class="field-error">{{ photo.extraction_error }}</span>{% endif %}</dd>
+        <dt>Elektroměr</dt><dd>{% if photo.meter_id and meters.get(photo.meter_id) %}{{ meters[photo.meter_id].meter_point.name }} – {{ meters[photo.meter_id].serial }} <span class="muted small">({{ method_labels.get(photo.match_method, photo.match_method or '') }})</span>{% else %}–{% endif %}</dd>
+        <dt>Soubor</dt><dd>{{ photo.width }}×{{ photo.height }} px, {{ ((photo.size_bytes or 0) / 1024)|round|int }} kB, {{ photo.content_type }}</dd>
+      </dl>
+      {% if current_user.is_admin %}
+      <div class="rc-actions">
+        <form method="post" action="/fotky/{{ photo.id }}/znovu" class="inline">{{ ui.csrf_field() }}<button class="btn" type="submit">Rozpoznat znovu</button></form>
+        {% if photo.review_status == 'new' %}
+        <form method="post" action="/fotky/{{ photo.id }}/stav" class="inline">{{ ui.csrf_field() }}<input type="hidden" name="review_status" value="discarded"><button class="btn btn-danger" type="submit">Zahodit</button></form>
+        {% elif photo.review_status == 'discarded' %}
+        <form method="post" action="/fotky/{{ photo.id }}/stav" class="inline">{{ ui.csrf_field() }}<input type="hidden" name="review_status" value="new"><button class="btn" type="submit">Vrátit do kontroly</button></form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+
+    {% if matched %}
+    <section class="card">
+      <h2>Rozpoznáno</h2>
+      {% if not matched.readable %}<p><span class="badge badge-warning">nečitelné</span></p>{% endif %}
+      {% if problems %}<p>{% for p in problems %}{{ ui.badge(p, 'warning') }} {% endfor %}</p>{% endif %}
+      {% for m in matched.meters %}
+      <div class="readout">
+        <p><strong>{{ m.serial or 'výr. číslo nečitelné' }}</strong>
+          {% if m.meter_id and meters.get(m.meter_id) %}→ {{ meters[m.meter_id].meter_point.name }} ({{ method_labels.get(m.match_method, m.match_method) }}){% elif m.match_method == 'unknown_serial' %}<span class="badge badge-error">neznámé výr. číslo</span>{% else %}<span class="muted">nepřiřazeno</span>{% endif %}</p>
+        <ul>{% for r in m.registers %}
+          <li>{{ r.register or '?' }}: <strong>{{ r.value|num(3) if r.value is not none else 'nečitelné' }}</strong>
+            <span class="muted small">číslice „{{ r.digits_seen }}“{% if r.label_seen %}, popisek „{{ r.label_seen }}“{% endif %}, jistota {{ (r.confidence * 100)|round|int }} %{% if r.second_read is not none %}, druhé čtení {% if r.second_read %}„{{ r.second_read }}“{% else %}nic nepřečetlo{% endif %}{% endif %}</span>
+            {% for p in r.problems %}{{ ui.badge(problem_label(p), 'warning') }}{% endfor %}</li>
+        {% endfor %}</ul>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <section class="card">
+      <h2>Odečty z této fotky</h2>
+      {% if readings %}
+      <ul>{% for r in readings %}<li>{{ r.meter.meter_point.name }} {{ r.meter.serial }} {{ r.register }}: <strong>{{ r.value|num(3) }}</strong> ({{ r.taken_at|date_cs }}){% if r.status == 'pending' %} {{ ui.badge('nepotvrzeno', 'warning') }}{% endif %}</li>{% endfor %}</ul>
+      {% else %}<p class="muted">Žádné.</p>{% endif %}
+    </section>
+
+    {% if series|length > 1 %}
+    <section class="card">
+      <h2>Série</h2>
+      <div class="thumb-grid small-thumbs">{% for s in series %}<a href="/fotky/{{ s.id }}" class="thumb{% if s.id == photo.id %} current{% endif %}"><img src="/fotky/{{ s.id }}/nahled" alt="#{{ s.id }}" loading="lazy"><span class="small">#{{ s.id }} {{ s.taken_at.strftime('%H:%M:%S') if s.taken_at }}</span></a>{% endfor %}</div>
+    </section>
+    {% endif %}
+
+    {% if raw_json %}
+    <details class="card"><summary>Surový výsledek rozpoznání (JSON)</summary><pre class="raw-json">{{ raw_json }}</pre></details>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/capture.js') }}" defer></script>{% endblock %}

@@ -1,0 +1,17 @@
+{% import "_macros.html" as ui with context %}
+<div class="form-grid">
+  {{ ui.field('name', 'Název', p.name if p else '', required=true) }}
+  {{ ui.select('role', 'Role', [('sub', 'podružný'), ('main', 'hlavní'), ('control', 'kontrolní (součtový)')], p.role if p else 'sub') }}
+  {{ ui.field('sort_order', 'Pořadí v obchůzce', p.sort_order if p else 999, type='number', attrs={'step': 1, 'inputmode': 'numeric'}) }}
+  <div class="field">
+    <label for="f-parent_point_id">Nadřazený (kontrolní) měřák</label>
+    <select id="f-parent_point_id" name="parent_point_id">
+      <option value="">– žádný –</option>
+      {% for x in all_points %}{% if not p or x.id != p.id %}<option value="{{ x.id }}"{% if p and p.parent_point_id == x.id %} selected{% endif %}>{{ x.name }}{% if x.role == 'control' %} (kontrolní){% endif %}</option>{% endif %}{% endfor %}
+    </select>
+    <p class="field-help">Pro bilanci: kontrolní měřák vs. součet jeho podřízených.</p>
+  </div>
+  {{ ui.field('description', 'Popis / umístění', p.description if p else '') }}
+  {{ ui.checkbox('active', 'Aktivní (zobrazuje se v obchůzce)', p.active if p else true) }}
+  <div class="span-2">{{ ui.textarea('note', 'Poznámka', p.note if p else '', rows=2) }}</div>
+</div>

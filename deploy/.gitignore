@@ -1,0 +1,4 @@
+# installation-specific values (host, e-mails) - see local.env.example
+local.env
+# scratch directory of test/e2e-local.sh
+test/.work/

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui with context %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
+{% block content %}
+{% call ui.page_header('Kontrola odečtů', 'Fotky a rozpoznané hodnoty čekající na potvrzení. Nic se nezapíše bez potvrzení.') %}
+  <a class="btn" href="/odecty/davka">Nahrát fotky</a>
+  <a class="btn" href="/odecty/novy">Ruční odečet</a>
+{% endcall %}
+
+{% if not extraction_on %}
+{{ ui.alert_box('Automatické rozpoznávání není zapnuté (EXTRACTOR=none) – hodnoty z fotek zadejte ručně.', 'info') }}
+{% elif queued %}
+<div class="alert alert-info" hx-get="/odecty/kontrola" hx-trigger="every 20s" hx-select="#review-summary" hx-target="#review-summary" hx-swap="outerHTML">
+  Rozpoznává se {{ queued }} fotek – karty se doplní samy.</div>
+{% endif %}
+
+<div id="review-summary" class="review-summary">
+  <span>Karet ke kontrole: <strong>{{ cards|length }}</strong></span>
+  <span>bez varování: <strong>{{ clean_count }}</strong></span>
+  {% if pending %}<a href="#cekajici">nepotvrzené odečty z obchůzky: <strong>{{ pending|length }}</strong></a>{% endif %}
+</div>
+
+{% if current_user.is_admin and clean_count %}
+<form method="post" action="/odecty/kontrola/hromadne" class="card bulk-box">
+  {{ ui.csrf_field() }}
+  <p><strong>Hromadné potvrzení</strong> – jen karty bez jakéhokoli varování (datum z EXIF, přiřazený elektroměr,
+    jednoznačná hodnota v očekávaném rozsahu). Hodnoty si prosím projděte níže.</p>
+  <ul class="bulk-list">
+    {% for c in cards if c.clean %}
+    <li><label><input type="checkbox" name="card" value="{{ c.key }}" checked>
+      <input type="hidden" name="photos_{{ c.key }}" value="{{ c.photo_ids|join(',') }}">
+      {{ c.taken_at|datetime_cs }} –
+      {% for r in c.rows %}{{ r.meter.point_name }} ({{ r.meter.serial }}){% for reg in r.registers %} {{ reg }}: <strong>{{ r.values[reg]|replace('.', ',') }}</strong>{% endfor %}{% if not loop.last %}; {% endif %}{% endfor %}
+      <a href="#karta-{{ c.key }}">karta</a></label></li>
+    {% endfor %}
+  </ul>
+  <button class="btn btn-primary" type="submit">Potvrdit vybrané ({{ clean_count }})</button>
+</form>
+{% endif %}
+
+{% for card in cards %}
+  {% include "odecty/_card.html" %}
+{% else %}
+  <section class="card"><p>Žádné fotky ke kontrole. 🎉</p>
+    <p class="muted">Fotky z obchůzky se potvrzují rovnou v aplikaci Obchůzka; sem přijdou fotky z dávky, sdílené fotky a ty, u kterých obchůzka nebyla dokončena.</p></section>
+{% endfor %}
+
+{% if pending %}
+<h2 id="cekajici">Nepotvrzené odečty z obchůzky</h2>
+<p class="muted">Hodnoty zadané v obchůzce, u kterých server našel varování, které v telefonu nebylo potvrzeno.</p>
+{% for pv in pending %}
+<form method="post" action="/odecty/kontrola/cekajici/{{ pv.reading.id }}" class="card pending-row">
+  {{ ui.csrf_field() }}
+  <div class="pending-head">
+    <strong>{{ pv.meter.meter_point.name }}</strong> <span class="muted">{{ pv.meter.serial }} {{ pv.reading.register }}</span>
+    · {{ pv.reading.taken_at|date_cs }}
+    {% if pv.reading.photo_id %}<a href="/fotky/{{ pv.reading.photo_id }}">fotka #{{ pv.reading.photo_id }}</a>{% endif %}
+  </div>
+  <div class="field inline-field"><label for="pv-{{ pv.reading.id }}">Hodnota</label>
+    <input id="pv-{{ pv.reading.id }}" name="value" inputmode="decimal" value="{{ plain(pv.reading.value) }}" class="num"></div>
+  {% for i in pv.issues %}
+  <label class="ack ack-{{ i.severity }}"><input type="checkbox" name="ack" value="{{ i.code }}"> <span>{{ i.message }} <em>Potvrzuji.</em></span></label>
+  {% endfor %}
+  {% if current_user.is_admin %}
+  <div class="rc-actions">
+    <button class="btn btn-primary" name="action" value="confirm">Potvrdit</button>
+    <button class="btn btn-danger" name="action" value="delete" data-confirm="Smazat tento odečet?">Smazat</button>
+  </div>
+  {% endif %}
+</form>
+{% endfor %}
+{% endif %}
+
+{% include "odecty/_viewer.html" %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/capture.js') }}" defer></script>{% endblock %}
