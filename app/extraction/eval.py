@@ -8,7 +8,7 @@ environment (or .env), e.g. to compare models (``--verify`` / ``--no-verify`` ov
 second, independent read per photo; values it does not reproduce are doubtful; doubles the cost)::
 
     EXTRACTOR=openai_compat EXTRACTOR_BASE_URL=https://openrouter.ai/api/v1 \\
-    EXTRACTOR_API_KEY=... EXTRACTOR_MODEL=google/gemini-2.5-flash \\
+    EXTRACTOR_API_KEY=... EXTRACTOR_MODEL=google/gemini-4-argon \\
     uv run python -m app.extraction.eval ~/fotky/obchuzka.zip --out gemini.json
 
 Hints (known meters, last readings) come from the app DB (DATA_DIR / DATABASE_URL) at each

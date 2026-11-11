@@ -169,7 +169,7 @@ elektroměrů (výrobní čísla, názvy míst, poslední stavy) – žádné e�
 EXTRACTOR=openai_compat
 EXTRACTOR_BASE_URL=https://openrouter.ai/api/v1
 EXTRACTOR_API_KEY=sk-or-...
-EXTRACTOR_MODEL=google/gemini-2.5-flash
+EXTRACTOR_MODEL=google/gemini-4-argon
 ```
 
 ### 2.2 Lokální model (Ollama / llama.cpp)
