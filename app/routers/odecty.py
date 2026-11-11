@@ -44,7 +44,7 @@ from app.extraction.types import problem_label
 from app.models import AuditLog, Meter, MeterPoint, Photo, Reading
 from app.services.network import load_network
 from app.services.readings import meter_expected_range
-from app.templating import flash, format_reading, templates
+from app.templating import flash, format_date, format_reading, templates
 
 router = APIRouter(prefix="/odecty", dependencies=[Depends(require_user)])
 
@@ -389,7 +389,7 @@ async def novy_ulozit(request: Request, db: DbSession, user: AdminUser):
             overwrite="duplicate" in acks,
         )
     db.commit()
-    flash(request, f"Odečet {meter.serial} k {day.day}. {day.month}. {day.year} uložen.", "success")
+    flash(request, f"Odečet {meter.serial} k {format_date(day)} uložen.", "success")
     return RedirectResponse(f"/odecty?rok={day.year}#d-{day.isoformat()}", status_code=303)
 
 

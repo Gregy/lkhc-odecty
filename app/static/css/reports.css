@@ -34,8 +34,8 @@ table.compact th, table.compact td { padding: 4px 8px; }
 
 /* --- quality --------------------------------------------------------------- */
 .q-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.82rem; color: var(--text-2); margin: 8px 0 0; }
-.q-estimated, .q-provisional { border-radius: 3px; }
-.q-estimated[tabindex]:focus-visible, .q-provisional[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.q-provisional { border-radius: 3px; }
+.q-provisional[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .q-popover {
   position: absolute; z-index: 50; max-width: min(420px, calc(100vw - 16px)); background: var(--surface);
   color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px;
@@ -101,7 +101,7 @@ input.input-narrow { width: 6em; min-height: 36px; padding: 4px 8px; }
   table.data { font-size: 9.5pt; }
   table.data th, table.data td { padding: 3px 6px; }
   .table-wrap { overflow: visible; }
-  .q-estimated, .q-provisional { color: #000 !important; }
+  .q-provisional { color: #000 !important; }
   a { color: #000; text-decoration: none; }
   .container { max-width: none; padding: 0; }
   .card { padding: 0; margin-bottom: 12px; }

@@ -9,13 +9,21 @@ Nahrazuje Google Sheet `Odečty elektřiny.xlsx`:
 - **Rozpoznání stavů z fotek** vision modelem (OpenRouter nebo lokální Ollama / llama.cpp) –
   nic se nezapíše bez potvrzení člověkem ve **frontě kontroly** (`/odecty/kontrola`).
 - **Přehledy**: spotřeba po nájemcích a měřicích místech v zarovnaných kalendářních měsících
-  (stavy na hranicích přesné / odhadnuté / předběžné – vždy vyznačeno), bilance hlavního elektroměru,
-  upozornění na chybějící odečty a anomálie.
+  (stav na hranici je skutečný odečet, nebo dopočtený z okolních odečtů; hodnoty interpolované mezi dvěma
+  odečty se neoznačují, značkou **≈** je vyznačen jen *předběžný* extrapolovaný odhad za posledním
+  odečtem, který se ještě změní), bilance hlavního elektroměru, upozornění na chybějící odečty a anomálie.
+- **Zbytkový nájemce** (hlavní elektroměr − ostatní) se všude ukazuje jen v součtu **T1+T2**: jednotarifní
+  podružné elektroměry se počítají celé do T1, takže rozdělení zbytku na tarify nedává smysl (jeho T1 by
+  vycházelo příliš nízko, v zimě i záporně, T2 příliš vysoko). Surový pohled „po dnech odečtů“ (jako list
+  v původní tabulce) zůstává po tarifech.
 - **Roční vyúčtování** pro nájemce: tabulka po obdobích × nájemcích × T1/T2, protokoly, export XLSX,
   tisková verze (PDF přes tisk prohlížeče), finalizace se snapshotem (pozdější opravy odečtů se do
   uzavřeného roku nepropíší).
-- **Správa** (`/sprava`, jen admin): nájemci, měřicí místa, elektroměry (výměny, desetinná místa displeje),
-  alokace míst nájemcům, uživatelé a role, audit všech změn.
+- **Správa** (`/sprava`): pro adminy nájemci, měřicí místa, elektroměry (výměny, desetinná místa displeje),
+  alokace míst nájemcům, uživatelé a role, audit všech změn; pro všechny (i čtenáře) odkazy na přehledy
+  **Místa**, **Nájemci** a **Fotky**.
+- Hlavní menu: Přehled, Odečty, Spotřeba, Obchůzka, Dávka (jen admin), Kontrola, Vyúčtování, Správa.
+  Data se zobrazují česky bez mezer: `3.7.2026`, `3.7.2026 14:05`, měsíc `7.2026`.
 
 Specifikace: [`docs/SPEC.md`](docs/SPEC.md), rozhraní služeb a výpočtů: [`docs/SERVICES.md`](docs/SERVICES.md).
 
@@ -270,7 +278,7 @@ Fotka bez přečtených číslic se podruhé neposílá.
 3. **Sdílení z WhatsAppu** (stavy, které posílají nájemci): v chatu podržte fotku(y) → *Sdílet* →
    **LKHC Odečty**. Aplikace se otevře s fotkami „připravenými“, vyplníte kdo nahlásil a potvrdíte
    *Odeslat ke kontrole*. Funguje jen s nainstalovanou PWA (Android/Chrome); jinde použijte
-   *Dávka fotek*. WhatsApp maže EXIF – datum z názvu souboru (`IMG-YYYYMMDD-WA…`) je jen **návrh**
+   *Dávka* (nahrání dávky fotek). WhatsApp maže EXIF – datum z názvu souboru (`IMG-YYYYMMDD-WA…`) je jen **návrh**
    (je to datum odeslání), ve frontě kontroly musíte skutečné datum odečtu potvrdit.
 4. Zapisovat (obchůzka, nahrávání, kontrola, správa) mohou jen **admini**; čtenáři vidí přehledy.
 

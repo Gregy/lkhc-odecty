@@ -67,7 +67,7 @@ def najemci(request: Request, db: DbSession, user: CurrentUser):
         "najemci/index.html",
         {
             "page_title": "Nájemci",
-            "active_nav": "/najemci",
+            "active_nav": "/sprava",
             "rows": rows,
             "year": year,
             "cov": cov,
@@ -90,7 +90,7 @@ def najemce(request: Request, tenant_id: int, db: DbSession, user: CurrentUser):
     rng = year_range(year, cov, include_provisional=provisional, today=today)
     ctx: dict = {
         "page_title": tenant.name,
-        "active_nav": "/najemci",
+        "active_nav": "/sprava",
         "tenant": tenant,
         "year": year,
         "years": data_years(cov, today),

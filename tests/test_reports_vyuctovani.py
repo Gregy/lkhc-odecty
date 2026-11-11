@@ -32,7 +32,7 @@ def test_list_and_bounds_preview(imported_reader_client) -> None:
     assert r.status_code == 200 and "Zatím žádné vyúčtování" in r.text
     assert "Nové vyúčtování" not in r.text  # reader cannot create
     frag = imported_reader_client.get("/vyuctovani/hranice?year=2025").text
-    assert "odečtů hlavního elektroměru" in frag and "2.\xa01.\xa02025" in frag and "4.\xa01.\xa02026" in frag
+    assert "odečtů hlavního elektroměru" in frag and "2.1.2025" in frag and "4.1.2026" in frag
 
 
 def test_reader_cannot_mutate(imported_reader_client, imported_admin_client) -> None:
@@ -79,7 +79,7 @@ def test_own_dates_like_final_sheet(imported_admin_client, imported_db: Session)
     assert "2.1.2025–1.2.2025" in html and "1.1.2026–4.1.2026" in html
     # the bounds helper offers the main-meter reading days nearest to 1.1.
     frag = imported_admin_client.get("/vyuctovani/hranice?year=2025").text
-    assert "2.\xa01.\xa02025" in frag and "4.\xa01.\xa02026" in frag
+    assert "2.1.2025" in frag and "4.1.2026" in frag
 
 
 def test_finalize_blocked_then_forced(imported_admin_client, imported_db: Session) -> None:
@@ -195,7 +195,8 @@ def test_xlsx_export_structure(imported_admin_client, imported_db: Session) -> N
     assert wb.sheetnames == ["Souhrn", *[t.name for t in net.tenants]]
     summary = [[c.value for c in row] for row in wb["Souhrn"].iter_rows()]
     flat = [v for row in summary for v in row if v is not None]
-    assert "Kvalita hodnot:" in flat and "≈? předběžně" in flat
+    assert "Kvalita hodnot:" in flat and "předběžně" in flat
+    assert "odhad" not in flat and not any("interpolace):" in str(v) for v in flat)  # interpolation is not flagged
     hdr = next(row for row in summary if row[0] == "Období")
     assert f"{syn.B} kvalita" in hdr and f"{syn.A} T1" in hdr
     total = next(row for row in summary if row[0] == "Celkem")

@@ -2,7 +2,8 @@
 
 Shared by the Jinja filters (``app.templating``) and by Czech messages built in the
 pure domain (``app.domain.anomalies``), so every user-facing number looks the same:
-non-breaking space as thousands separator, decimal comma, proper minus sign.
+non-breaking space as thousands separator, decimal comma, proper minus sign; dates as
+``3.7.2026``. Also the presentation rule for quality marks of aligned values (``quality_mark``).
 """
 
 from __future__ import annotations
@@ -51,13 +52,42 @@ def format_kwh(value: Any, decimals: int = 0) -> str:
 
 
 def format_date(value: date | datetime | None, with_year: bool = True) -> str:
+    """Czech date without spaces and leading zeros: ``3.7.2026`` (``3.7.`` without the year). None -> '–'.
+
+    The single date format of the UI and of human-readable exports (never ``3. 7. 2026``); machine
+    formats (CSV/JSON keys, ``<input type=date>`` values, file names) keep ISO dates."""
     if value is None:
         return "–"
-    s = f"{value.day}.{NBSP}{value.month}."
-    return f"{s}{NBSP}{value.year}" if with_year else s
+    s = f"{value.day}.{value.month}."
+    return f"{s}{value.year}" if with_year else s
+
+
+def format_month(value: date | datetime | None) -> str:
+    """Month and year: ``7.2026``. None -> '–'."""
+    if value is None:
+        return "–"
+    return f"{value.month}.{value.year}"
 
 
 def format_datetime(value: datetime | None) -> str:
+    """Date and time: ``3.7.2026 14:05``. None -> '–'."""
     if value is None:
         return "–"
     return f"{format_date(value)} {value:%H:%M}"
+
+
+# --- quality marks of aligned values -----------------------------------------------------------
+
+# Interpolated values (quality "estimated") are the normal case and are shown like exact ones; only
+# extrapolated values beyond the last reading (quality "provisional") carry a visible mark.
+PROVISIONAL_MARK = "≈"
+
+
+def is_marked(quality: Any) -> bool:
+    """True when a value of this quality (Quality enum or its string value) gets a visible mark."""
+    return str(quality) == "provisional"
+
+
+def quality_mark(quality: Any) -> str:
+    """Visible mark for a value of this quality: '≈' for provisional (extrapolated), '' otherwise."""
+    return PROVISIONAL_MARK if is_marked(quality) else ""

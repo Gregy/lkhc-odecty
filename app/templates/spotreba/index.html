@@ -20,7 +20,7 @@
       </tr>
       {% if p.split %}
       <tr>
-        {% for c in tab.cols %}<th scope="col" class="num{% if loop.first or c.group != tab.cols[loop.index0 - 1].group %} group-start{% endif %}">{{ c.label }}</th>{% endfor %}
+        {% for c in tab.cols %}<th scope="col" class="num{% if loop.first or c.group != tab.cols[loop.index0 - 1].group %} group-start{% endif %}"{% if c.title %} title="{{ c.title }}"{% endif %}>{{ c.label }}</th>{% endfor %}
       </tr>
       {% endif %}
     </thead>
@@ -116,7 +116,10 @@
 
 <h2>Po nájemcích</h2>
 {{ cons_table(ttab, "Spotřeba po nájemcích (kWh)" ~ (" – " ~ p.year if p.year else "")) }}
-{% if p.view == 'zarovnane' %}{{ rm.quality_legend("Zbytek = hlavní elektroměr − ostatní nájemci; záporné hodnoty jsou zvýrazněny.") }}{% endif %}
+{% if p.view == 'zarovnane' %}
+{% if p.split and ttab.cols|selectattr('title')|list %}{{ ui.remainder_note() }}{% endif %}
+{{ rm.quality_legend("Zbytek = hlavní elektroměr − ostatní nájemci; záporné hodnoty jsou zvýrazněny.") }}
+{% endif %}
 
 <h2>Po měřicích místech</h2>
 {{ cons_table(ptab, "Spotřeba po měřicích místech (kWh)" ~ (" – " ~ p.year if p.year else "")) }}

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.capture.readings import InputError, write_reading
+from app.formatting import format_date
 from app.models import Meter, MeterPoint, Reading, User
 
 
@@ -69,7 +70,7 @@ def create_meter(
             select(func.max(Reading.taken_at)).where(Reading.meter_id == old.id, Reading.status == "confirmed")
         )
         if last_old is not None and last_old.date() > installed_on:
-            raise InputError(f"Starý elektroměr {old.serial} má odečet po datu výměny ({last_old:%d.%m.%Y}).")
+            raise InputError(f"Starý elektroměr {old.serial} má odečet po datu výměny ({format_date(last_old)}).")
         if old.removed_on is None:
             ch = audit.apply_changes(old, {"removed_on": installed_on})
             audit.record_update(db, user, old, ch, note=f"výměna za {serial}")

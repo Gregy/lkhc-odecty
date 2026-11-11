@@ -96,6 +96,27 @@
     const s = fmtNumber(value, decimals);
     return s === "–" ? s : s + " kWh";
   }
+  // Dates like the server-side |date_cs / |datetime_cs / |month_cs filters: "3.7.2026", "3.7.2026 14:05",
+  // "7.2026" (no spaces – the browser's cs-CZ locale formatting would give "3. 7. 2026"). Accepts a Date, ms or
+  // an ISO string.
+  function toDate(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const d = value instanceof Date ? value : new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function fmtDate(value) {
+    const d = toDate(value);
+    return d ? d.getDate() + "." + (d.getMonth() + 1) + "." + d.getFullYear() : "–";
+  }
+  function fmtDateTime(value) {
+    const d = toDate(value);
+    return d ? fmtDate(d) + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) : "–";
+  }
+  function fmtMonth(value) {
+    const d = toDate(value);
+    return d ? (d.getMonth() + 1) + "." + d.getFullYear() : "–";
+  }
 
   // --- tenant colours (stable across the app; see base.html) ---------------------
   function isDark() {
@@ -121,6 +142,9 @@
     fetch: window.fetch,
     fmtNumber: fmtNumber,
     fmtKwh: fmtKwh,
+    fmtDate: fmtDate,
+    fmtDateTime: fmtDateTime,
+    fmtMonth: fmtMonth,
     tenantColors: tenantColors,
     isDark: isDark,
     cssVar: cssVar,

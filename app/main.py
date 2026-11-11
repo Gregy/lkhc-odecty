@@ -151,6 +151,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     for module in PAGE_ROUTERS:
         app.include_router(module.router)
+    app.include_router(sprava.overview_router)  # /sprava landing page, open to readers too
     extraction_queue.install(app)  # [capture] background extraction worker in the app lifespan
     _check_revision_on_startup(app, settings.sqlalchemy_url)
 

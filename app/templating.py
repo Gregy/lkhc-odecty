@@ -28,8 +28,11 @@ from app.formatting import (  # noqa: F401 - re-exported for routers/services
     format_date,
     format_datetime,
     format_kwh,
+    format_month,
     format_number,
     format_reading,
+    is_marked,
+    quality_mark,
 )
 from app.models import Tenant
 
@@ -39,19 +42,25 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 # (label, url, admin_only); `active_nav` in a page context should equal the url.
+# Místa, Nájemci and Fotky are not top-level tabs: they are reached from the Správa page (visible to readers
+# too, with just those read-only pages) and their pages set active_nav = "/sprava".
 NAV: list[tuple[str, str, bool]] = [
     ("Přehled", "/", False),
-    ("Spotřeba", "/spotreba", False),
-    ("Místa", "/mista", False),
-    ("Nájemci", "/najemci", False),
-    ("Vyúčtování", "/vyuctovani", False),
     ("Odečty", "/odecty", False),
+    ("Spotřeba", "/spotreba", False),
     ("Obchůzka", "/obchuzka", False),
-    ("Dávka fotek", "/odecty/davka", True),  # upload is admin-only
+    ("Dávka", "/odecty/davka", True),  # upload is admin-only
     ("Kontrola", "/odecty/kontrola", False),
-    ("Fotky", "/fotky", False),
-    ("Správa", "/sprava", True),
+    ("Vyúčtování", "/vyuctovani", False),
+    ("Správa", "/sprava", False),  # readers get the read-only part (Místa, Nájemci, Fotky)
 ]
+
+# The remainder tenant (main − others, computed per register) is shown only as T1+T2: single-tariff
+# sub-meters count fully into T1, so its T1 part is too low (even negative) and its T2 part too high.
+REMAINDER_TARIFF_NOTE = (
+    "Jednotarifní podružné elektroměry se počítají celé do T1, proto má rozdělení zbytku na tarify smysl "
+    "jen v součtu (T1+T2)."
+)
 
 QUALITY_LABELS = {
     Quality.EXACT: "přesná hodnota",
@@ -111,18 +120,18 @@ def quality_title(q: QValue | Quality | None) -> str:
 
 
 def qvalue_html(q: QValue | None, decimals: int = 0, unit: bool = False) -> Markup:
-    """Number with quality marker: estimated = '≈' + italic, provisional = '≈?' + dotted underline."""
+    """Number with quality marker. Only provisional (extrapolated) values are marked: '≈' + italic + dotted
+    underline, focusable for a tap/keyboard provenance popover. Interpolated (estimated) values look like
+    exact ones (the provenance stays in the hover title)."""
     if q is None:
         return Markup('<span class="num muted">–</span>')
     txt = format_kwh(q.value, decimals) if unit else format_number(q.value, decimals)
-    cls = f"num q-{q.quality.value}"
-    if q.value < 0:
-        cls += " negative"
-    if q.quality == Quality.EXACT:
-        return Markup('<span class="{}" title="{}">{}</span>').format(cls, quality_title(q), txt)
-    # provisional gets "≈?" (distinguishable from estimated without colour); focusable for tap/keyboard tooltips
-    prefix = "≈?" if q.quality == Quality.PROVISIONAL else "≈"
-    return Markup('<span class="{}" title="{}" tabindex="0">{}{}</span>').format(cls, quality_title(q), prefix, txt)
+    neg = " negative" if q.value < 0 else ""
+    if not is_marked(q.quality):
+        return Markup('<span class="num{}" title="{}">{}</span>').format(neg, quality_title(q), txt)
+    return Markup('<span class="num q-provisional{}" title="{}" tabindex="0">{}{}</span>').format(
+        neg, quality_title(q), quality_mark(q.quality), txt
+    )
 
 
 # --- flash messages -------------------------------------------------------------
@@ -193,11 +202,15 @@ _env.filters.update(
         "kwh": format_kwh,
         "date_cs": format_date,
         "datetime_cs": format_datetime,
+        "month_cs": format_month,
+        "qmark": quality_mark,
         "quality_title": quality_title,
         "qvalue": qvalue_html,
     }
 )
-_env.globals.update({"Quality": Quality, "QUALITY_LABELS": QUALITY_LABELS})
+_env.globals.update(
+    {"Quality": Quality, "QUALITY_LABELS": QUALITY_LABELS, "REMAINDER_TARIFF_NOTE": REMAINDER_TARIFF_NOTE}
+)
 
 
 def render_stub(request: Request, title: str, active_nav: str, description: str = "") -> Any:

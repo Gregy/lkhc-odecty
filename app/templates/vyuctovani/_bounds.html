@@ -3,7 +3,7 @@
   <ul class="issues">
     <li>Výchozí: {{ bounds.start|date_cs }} – {{ bounds.end|date_cs }}, {{ bounds.boundaries|length - 1 }} měsíčních období; stavy na hranicích se dopočtou (kvalita vyznačena).</li>
     {% if bounds.main_near_start and bounds.main_near_end and bounds.main_near_end > bounds.main_near_start %}
-    <li>Nebo vlastní data, např. podle odečtů hlavního elektroměru nejbližších 1. 1.:
+    <li>Nebo vlastní data, např. podle odečtů hlavního elektroměru nejbližších 1.1.:
       {{ bounds.main_near_start|date_cs }} – {{ bounds.main_near_end|date_cs }}
       (hlavní elektroměr i zbytek jsou na hranicích přesné; jako dřívější listy Final_YYYY)
       <button type="button" class="btn-link"

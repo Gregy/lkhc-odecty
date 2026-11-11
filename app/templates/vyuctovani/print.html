@@ -22,7 +22,7 @@
       <thead><tr><th scope="col">Nájemce</th><th scope="col" class="num">T1 kWh</th><th scope="col" class="num">T2 kWh</th><th scope="col" class="num">Celkem kWh</th><th scope="col">Kvalita</th></tr></thead>
       <tbody>
         {% for t in doc.tenants %}
-        <tr><th scope="row">{{ ui.tenant(t) }}</th><td class="num">{{ rm.qd(t.totals.T1) }}</td><td class="num">{{ rm.qd(t.totals.T2) }}</td><td class="num strong">{{ rm.qd(t.total) }}</td><td>{{ rm.qbadge(t.total.quality) }}</td></tr>
+        <tr><th scope="row">{{ ui.tenant(t) }}</th><td class="num">{{ rm.reg_qd(t.totals.T1, t.is_remainder) }}</td><td class="num">{{ rm.reg_qd(t.totals.T2, t.is_remainder) }}</td><td class="num strong">{{ rm.qd(t.total) }}</td><td>{{ rm.qbadge(t.total.quality) }}</td></tr>
         {% endfor %}
       </tbody>
       <tfoot><tr><th scope="row">Hlavní elektroměr</th><td class="num">{{ rm.qd(doc.main.T1) }}</td><td class="num">{{ rm.qd(doc.main.T2) }}</td><td class="num">{{ rm.qd(doc.main_total) }}</td><td>{{ rm.qbadge(doc.main_total.quality) }}</td></tr></tfoot>
@@ -32,6 +32,7 @@
   <p class="small"><strong>Předběžné stavy na hranicích:</strong></p>
   <ul class="issues small">{% for m in doc.check.provisional %}<li>{{ m }}</li>{% endfor %}</ul>
   {% endif %}
+  {% if doc.tenants|selectattr('is_remainder')|list %}{{ ui.remainder_note() }}{% endif %}
   {{ rm.quality_legend() }}
 </section>
 {% endif %}

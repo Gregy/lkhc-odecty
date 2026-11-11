@@ -50,15 +50,16 @@
       <thead><tr><th scope="col">Měsíc</th><th scope="col" class="num">T1</th><th scope="col" class="num">T2</th><th scope="col" class="num">Celkem</th></tr></thead>
       <tbody>
         {% for m in months %}
-        <tr><th scope="row">{{ m.label }}</th><td class="num">{{ m.regs.T1|qvalue }}</td><td class="num">{{ m.regs.T2|qvalue }}</td><td class="num strong">{{ m.total|qvalue }}</td></tr>
+        <tr><th scope="row">{{ m.label }}</th><td class="num">{{ ui.reg_qv(m.regs.T1, tenant.is_remainder) }}</td><td class="num">{{ ui.reg_qv(m.regs.T2, tenant.is_remainder) }}</td><td class="num strong">{{ m.total|qvalue }}</td></tr>
         {% endfor %}
       </tbody>
       <tfoot>
-        <tr><th scope="row" title="{{ rng[0]|date_cs }} – {{ rng[1]|date_cs }}">Součet</th><td class="num">{{ sums.T1|qvalue }}</td><td class="num">{{ sums.T2|qvalue }}</td><td class="num">{{ sums.total|qvalue }}</td></tr>
+        <tr><th scope="row" title="{{ rng[0]|date_cs }} – {{ rng[1]|date_cs }}">Součet</th><td class="num">{{ ui.reg_qv(sums.T1, tenant.is_remainder) }}</td><td class="num">{{ ui.reg_qv(sums.T2, tenant.is_remainder) }}</td><td class="num">{{ sums.total|qvalue }}</td></tr>
         {% if prev_sum %}<tr><th scope="row">Loni (stejné měsíce)</th><td></td><td></td><td class="num">{{ prev_sum|qvalue }}</td></tr>{% endif %}
       </tfoot>
     </table>
   </div>
+  {% if tenant.is_remainder %}{{ ui.remainder_note() }}{% endif %}
   {{ rm.quality_legend() }}
 </section>
 
@@ -66,7 +67,7 @@
   <h2 class="card-title">{{ 'Skladba zbytku' if tenant.is_remainder else 'Po měřicích místech' }}</h2>
   <div class="table-wrap">
     <table class="data sticky-first compact">
-      <thead><tr><th scope="col">{{ 'Složka' if tenant.is_remainder else 'Místo' }}</th>{% for s in periods %}<th scope="col" class="num">{{ s.start.month }}/{{ s.start.year }}</th>{% endfor %}<th scope="col" class="num group-start">Součet</th></tr></thead>
+      <thead><tr><th scope="col">{{ 'Složka' if tenant.is_remainder else 'Místo' }}</th>{% for s in periods %}<th scope="col" class="num">{{ s.start|month_cs }}</th>{% endfor %}<th scope="col" class="num group-start">Součet</th></tr></thead>
       <tbody>
         {% for b in breakdown %}
         <tr>

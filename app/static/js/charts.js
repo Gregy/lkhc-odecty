@@ -2,13 +2,14 @@
  *
  * Data comes from <script type="application/json"> blocks rendered by the server.
  * Values with quality are objects {v: number, q: "exact"|"estimated"|"provisional", t: "provenance text"}.
+ * Only provisional (extrapolated) values are marked ("≈", hatched bars, provenance in the tooltip);
+ * interpolated ("estimated") values are shown like exact ones.
  * Colours: tenants use lkhc.tenantColors() (stable across the app), everything else uses CSS tokens.
  * Charts re-render when the colour scheme changes (light/dark).
  */
 (function () {
   "use strict";
 
-  var QLABEL = { exact: "přesně", estimated: "≈ odhad", provisional: "≈? předběžně" };
   var registry = []; // [{build: fn, chart: Chart}]
 
   function css(name, fallback) {
@@ -26,6 +27,9 @@
     };
   }
   function fmt(v, d) { return window.lkhc ? lkhc.fmtNumber(v, d || 0) : String(v); }
+  // "3.7.2026" / "7.2026" (no spaces, unlike the cs-CZ locale formatting); same as lkhc.fmtDate / lkhc.fmtMonth
+  function fmtDate(ms) { var d = new Date(ms); return d.getDate() + "." + (d.getMonth() + 1) + "." + d.getFullYear(); }
+  function fmtMonth(ms) { var d = new Date(ms); return (d.getMonth() + 1) + "." + d.getFullYear(); }
   function readJSON(id) {
     var el = document.getElementById(id);
     if (!el) return null;
@@ -41,10 +45,8 @@
     var all = window.lkhc ? lkhc.tenantColors() : {};
     return (all[String(id)] && all[String(id)].color) || "#888888";
   }
-  function qmark(p) {
-    if (!p) return "";
-    return p.q === "provisional" ? "≈?" : p.q === "estimated" ? "≈" : "";
-  }
+  function isMarked(p) { return !!p && p.q === "provisional"; }
+  function qmark(p) { return isMarked(p) ? "≈" : ""; }
   function compactTick(v) {
     var a = Math.abs(v);
     if (a >= 10000) return fmt(v / 1000, 0) + " tis.";
@@ -157,12 +159,12 @@
   }
   function qTooltipLine(name, p, unit) {
     if (!p) return name + ": –";
-    return name + ": " + qmark(p) + fmt(p.v, 0) + (unit ? " kWh" : "") + (p.q !== "exact" ? " (" + QLABEL[p.q].replace(/^≈\??\s*/, "") + ")" : "");
+    return name + ": " + qmark(p) + fmt(p.v, 0) + (unit ? " kWh" : "") + (isMarked(p) ? " (předběžně)" : "");
   }
   function provenanceFooter(points) {
     var lines = [];
     points.forEach(function (p) {
-      if (p && p.q !== "exact" && p.t) {
+      if (isMarked(p) && p.t) {
         p.t.split("\n").slice(1, 3).forEach(function (l) { if (lines.indexOf(l) < 0) lines.push(l); });
       }
     });
@@ -339,8 +341,6 @@
       var base = data.tenant_id ? tenantColor(data.tenant_id) : t.accent;
       var palette = [t.text2, base, t.muted, alpha(base, 0.55)];
       if (series.length === 1) palette = [base];
-      var dfmt = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" });
-      var mfmt = new Intl.DateTimeFormat("cs-CZ", { month: "numeric", year: "numeric" });
       var datasets = series.map(function (s, k) {
         var c = palette[k % palette.length];
         return {
@@ -358,13 +358,13 @@
         type: "linear",
         grid: { display: false },
         border: { color: t.grid },
-        ticks: { color: t.text2, maxTicksLimit: isNarrow() ? 4 : 8, callback: function (v) { return mfmt.format(new Date(v)); } },
+        ticks: { color: t.text2, maxTicksLimit: isNarrow() ? 4 : 8, callback: function (v) { return fmtMonth(v); } },
       };
       opts.scales.y.ticks.callback = function (v) { return fmt(v, 0); };
       opts.scales.y.beginAtZero = false;
       opts.scales.y.title.text = "stav počitadla";
       opts.plugins.tooltip.callbacks = {
-        title: function (items) { return items.length ? dfmt.format(new Date(items[0].parsed.x)) : ""; },
+        title: function (items) { return items.length ? fmtDate(items[0].parsed.x) : ""; },
         label: function (ctx) { return ctx.dataset.label + ": " + fmt(ctx.parsed.y, 0); },
       };
       renderLegend(legendId, series.map(function (s, k) { return { label: s.label, color: palette[k % palette.length], line: true }; }));
@@ -395,7 +395,7 @@
     pop.style.left = left + "px";
     pop.style.top = (window.scrollY + r.bottom + 6) + "px";
   }
-  var QSEL = ".q-estimated[title], .q-provisional[title], .q-estimated[data-title], .q-provisional[data-title], [data-q-pop]";
+  var QSEL = ".q-provisional[title], .q-provisional[data-title], [data-q-pop]";
   document.addEventListener("click", function (evt) {
     var el = evt.target.closest(QSEL);
     if (el) { evt.preventDefault(); if (pop && pop._for === el) { hidePop(); } else { showPop(el); if (pop) pop._for = el; } return; }

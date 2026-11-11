@@ -61,7 +61,7 @@ def fotky(request: Request, db: DbSession, stav: str = "vse", strana: int = 1):
         "fotky/index.html",
         {
             "page_title": "Fotky",
-            "active_nav": "/fotky",
+            "active_nav": "/sprava",
             "photos": photos,
             "meters": meters,
             "stav": stav,
@@ -98,7 +98,7 @@ def fotka(request: Request, photo_id: int, db: DbSession):
         "fotky/detail.html",
         {
             "page_title": f"Fotka #{photo.id}",
-            "active_nav": "/fotky",
+            "active_nav": "/sprava",
             "photo": photo,
             "matched": matched,
             "readings": readings,

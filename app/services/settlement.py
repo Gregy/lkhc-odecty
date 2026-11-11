@@ -12,6 +12,7 @@ from app.audit import jsonable
 from app.domain.aligned import BoundaryValue, Quality, QValue
 from app.domain.allocation import validity_window
 from app.domain.interpolation import Interpolator
+from app.formatting import format_date
 from app.services.consumption import (
     REGISTERS,
     IntervalResult,
@@ -48,13 +49,13 @@ class BoundaryIssue:
         if b.after is None and b.before is not None:  # removed meter without a final reading
             return (
                 f"{self.point_name} ({self.serial}) {self.register}: stav k {when} je odhad – elektroměr byl "
-                f"odebrán bez konečného odečtu, spotřeba od odečtu {b.before.taken_at:%d.%m.%Y} je dopočtena."
+                f"odebrán bez konečného odečtu, spotřeba od odečtu {format_date(b.before.taken_at)} je dopočtena."
             )
         src = []
         if b.before is not None:
-            src.append(f"{b.before.taken_at:%d.%m.%Y}")
+            src.append(f"{format_date(b.before.taken_at)}")
         if b.after is not None:
-            src.append(f"{b.after.taken_at:%d.%m.%Y}")
+            src.append(f"{format_date(b.after.taken_at)}")
         return f"{self.point_name} ({self.serial}) {self.register}: stav k {when} je odhad z odečtů {' a '.join(src)}."
 
 

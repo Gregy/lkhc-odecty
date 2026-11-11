@@ -18,7 +18,7 @@
         <th scope="col">Zdroj</th>
         <th scope="col">Poslední odečet</th>
         <th scope="col" class="num">Dní</th>
-        <th scope="col" class="num">{% if cov.last_month %}{{ cov.last_month[0].month }}/{{ cov.last_month[0].year }} kWh{% else %}kWh{% endif %}</th>
+        <th scope="col" class="num">{% if cov.last_month %}{{ cov.last_month[0]|month_cs }} kWh{% else %}kWh{% endif %}</th>
       </tr>
     </thead>
     <tbody>

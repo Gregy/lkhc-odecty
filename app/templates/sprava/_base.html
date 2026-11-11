@@ -3,9 +3,11 @@
 {% import "reports/_macros.html" as rm with context %}
 {% block head %}{{ rm.reports_css() }}{% endblock %}
 {% block content %}
-{{ ui.page_header(page_title|replace('Správa – ', '') if page_title != 'Správa' else 'Správa', 'administrace – všechny změny se zapisují do auditního logu') }}
+{{ ui.page_header(page_title|replace('Správa – ', '') if page_title != 'Správa' else 'Správa', 'administrace – všechny změny se zapisují do auditního logu' if current_user.is_admin else 'přehledy měřicích míst, nájemců a fotek (jen pro čtení)') }}
+{% if sections %}
 <nav class="section-nav" aria-label="Sekce správy">
   {% for label, url in sections %}<a href="{{ url }}"{% if url == section %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
 </nav>
+{% endif %}
 {% block sprava %}{% endblock %}
 {% endblock %}

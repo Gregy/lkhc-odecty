@@ -27,6 +27,7 @@ from app import audit
 from app.backup import snapshot_db, sqlite_path
 from app.config import get_settings
 from app.db import make_engine, make_sessionmaker
+from app.formatting import format_date
 from app.models import PointSkip, Reading, Settlement
 
 AUDIT_USER = "cli:move_reading_date"
@@ -67,7 +68,9 @@ def move_reading_date(db: Session, src: date, dst: date, *, note: str = "") -> M
             )
         )
         if other is not None:
-            conflicts.append(f"elektroměr #{r.meter_id} {r.register}: k {target:%d.%m.%Y} už je odečet {other.value}")
+            conflicts.append(
+                f"elektroměr #{r.meter_id} {r.register}: k {format_date(target)} už je odečet {other.value}"
+            )
     for sk in skips:
         if db.scalar(select(PointSkip).where(PointSkip.day == dst, PointSkip.meter_point_id == sk.meter_point_id)):
             conflicts.append(f"místo #{sk.meter_point_id}: k {dst.isoformat()} už je označené jako přeskočené")

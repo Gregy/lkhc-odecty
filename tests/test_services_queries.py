@@ -106,7 +106,9 @@ def test_staleness_and_alerts(imported_db: Session) -> None:
     assert hangar.staleness.last.taken_at == datetime(2025, 8, 2)
     alerts = s.alerts(imported_db, now=datetime(2026, 11, 10))
     kinds = {a.kind for a in alerts}
-    assert {"stale_meter", "anomaly", "negative_remainder"} <= kinds
+    assert {"stale_meter", "anomaly"} <= kinds
+    # the remainder's T1 part is negative in some months, but negative-remainder alerts evaluate T1+T2 (positive)
+    assert "negative_remainder" not in kinds
     # the synthetic heater month behind the corridor meter is reported as a usage spike
     assert any(a.kind == "anomaly" and syn.CORRIDOR_SERIAL in a.message for a in alerts)
     assert alerts[0].severity in ("error", "warning")

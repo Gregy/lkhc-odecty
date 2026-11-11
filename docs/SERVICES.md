@@ -92,7 +92,7 @@ or explicit `boundaries=[...]`, plus `interpolator=None`, `net=None`.
 |---|---|---|
 | `resolve_spans(db, *, granularity, start, end, boundaries)` | the periods the tables below use | `list[PeriodSpan]` |
 | `point_consumption_table(db, ...)` | consumption per meter point × register × period, summed over the point's meters (replacements) | `PointPeriodTable(periods, points, values[point_id][register] -> list[QValue])`, `.value(pid, reg, i)`, `.total(pid, i)` |
-| `tenant_consumption_table(db, ...)` | per tenant × register × period; remainder tenant = main − Σ others; quality = worst component, `estimated_kwh` summed | `TenantPeriodTable(periods, tenants, values[tenant_id][register] -> list[QValue], main[register] -> list[QValue], points: PointPeriodTable)`, `.value(tid, reg, i)`, `.total(tid, i)` (T1+T2), `.period_sum(tid, reg=None)`, `.negative_remainders() -> [(i, reg)]` |
+| `tenant_consumption_table(db, ...)` | per tenant × register × period; remainder tenant = main − Σ others (per register; present it only as T1+T2 – single-tariff sub-meters count fully into T1); quality = worst component, `estimated_kwh` summed | `TenantPeriodTable(periods, tenants, values[tenant_id][register] -> list[QValue], main[register] -> list[QValue], points: PointPeriodTable)`, `.value(tid, reg, i)`, `.total(tid, i)` (T1+T2), `.period_sum(tid, reg=None)`, `.negative_remainders() -> [(i, reg)]` |
 | `consumption_over_interval(db, start, end, *, interpolator=None, net=None)` | one arbitrary interval (settlements): per meter, point and tenant | `IntervalResult(start, end, points[pid][reg], tenants[tid][reg], main[reg], meters: list[MeterIntervalRow], tenant_infos, point_infos, tenant_points[tid] -> [pid])`, `.tenant_total(tid)`, `.quality` |
 | `control_balances(table: PointPeriodTable, idx=None)` | control point vs Σ children, and main vs Σ top-level sub/control points, for period `idx` or summed over all | `list[ControlBalanceRow(control_point_id, child_point_ids, register, control, children, difference)]` (QValues) |
 | `profile_interpolator(net, reference_point_id=None)` | interpolator following the main (or given) point's meter | `ProfileInterpolator` |
@@ -130,7 +130,7 @@ allocations change between two reading days).
 
 | Signature | Meaning | Returns |
 |---|---|---|
-| `alerts(db, now=None, *, months_back=12, anomaly_days=365, net=None)` | stale meters, anomalies, negative remainder & negative control balance (aligned months of the last `months_back` months), photos awaiting review, pending readings; most severe first | `list[Alert(kind, severity, message, meter_id, point_id, tenant_id, at, link)]`; `kind` ∈ `stale_meter`, `anomaly`, `negative_remainder`, `control_balance`, `pending_photos`, `pending_readings`; `severity` ∈ `info`, `warning`, `error` |
+| `alerts(db, now=None, *, months_back=12, anomaly_days=365, net=None)` | stale meters, anomalies, negative remainder (on the remainder tenant's T1+T2 total, not per register) & negative control balance (aligned months of the last `months_back` months), photos awaiting review, pending readings; most severe first | `list[Alert(kind, severity, message, meter_id, point_id, tenant_id, at, link)]`; `kind` ∈ `stale_meter`, `anomaly`, `negative_remainder`, `control_balance`, `pending_photos`, `pending_readings`; `severity` ∈ `info`, `warning`, `error` |
 | `last_reading_info(db, today=None)` | for the dashboard header: newest confirmed reading and newest main-meter reading | `LastReadingInfo(newest, newest_days, main, main_days)` |
 
 ### Settlements – `settlement.py`
@@ -153,10 +153,11 @@ Forcing finalization despite `provisional` values: set `Settlement.finalize_forc
 | `reports.year_range(year, cov, *, include_provisional=False, today=None)` | aligned month range of a year capped at the coverage end (or at the current month start) | `(start, end) \| None` |
 | `reports.data_years(cov, today=None)` | years offered in filters | `list[int]` |
 | `reports.qjson(q, decimals=1)` / `qdict(q)` | QValue → chart JSON `{v, q, t}` / snapshot dict `{value, quality, estimated_kwh, title}` (`title` = provenance text, like `|quality_title`) | `dict` |
-| `reports.boundary_title(b)` | Czech provenance of a `BoundaryValue` ("odhad k 1. 1. 2026: interpolace mezi odečty … (N dní)") | `str` |
+| `reports.boundary_title(b)` | Czech provenance of a `BoundaryValue` ("odhad k 1.1.2026: interpolace mezi odečty … (N dní)") | `str` |
+| `reports.quality_label(quality)` / `QUALITY_LEGEND` | text of export "Kvalita" columns: `"předběžně"` for provisional, `""` for exact / interpolated; the single legend entry | `str` |
 | `reports.settlement_document(result, net)` | `settlement_snapshot(result)` (version 1, unchanged keys) **plus** display data under extra keys: `reports` (=1), `generated_at`, period `days` and month labels, per value `title`, tenant `color`/`period_totals`/`total`/`allocations` (point × factor × validity window with values), remainder breakdown `remainder` (`main`, `others`, `unallocated`), `main_total`, `period_main`, meter `decimals_shown`/`point_role`/`source_type` and boundary `span_days`/`title`, overall `quality`. Stored as `Settlement.snapshot` at finalization; drafts render a fresh document | `dict` (JSON-safe) |
 | `reports.document_tenant(doc, tid)`, `document_tenant_meters(doc, tenant)` | protocol helpers over a document (remainder → main point meters) | |
-| `exports.*` | openpyxl/CSV helpers: `write_q` (value + fill + provenance comment), `write_legend`, `sheet_title`, `csv_bytes` (UTF‑8 BOM, `;`, decimal comma) | |
+| `exports.*` | openpyxl/CSV helpers: `write_q` (value; provisional ones get a fill + provenance comment), `write_legend`, `sheet_title`, `csv_bytes` (UTF‑8 BOM, `;`, decimal comma) | |
 
 ## Auth, DB session, audit (for routers)
 
@@ -198,22 +199,31 @@ All POST/PUT/PATCH/DELETE requests need the session token (403 otherwise):
 
 ## Templates and static
 
-- Pages extend `base.html` and set `page_title` and `active_nav` (= nav URL). Blocks: `head` (extra CSS,
+- Pages extend `base.html` and set `page_title` and `active_nav` (= nav URL). Main navigation (`app.templating.NAV`):
+  Přehled, Odečty, Spotřeba, Obchůzka, Dávka (admin), Kontrola, Vyúčtování, Správa. `/mista`, `/najemci`, `/fotky`
+  are linked from the Správa landing page (`sprava.overview_router`, open to readers, who see only those links;
+  the administration sections stay `require_admin`) and set `active_nav = "/sprava"`. Blocks: `head` (extra CSS,
   e.g. `reports.css` / `capture.css`), `content`, `scripts`, `body_class`.
 - Context available everywhere: `current_user`, `csrf_token`, `nav`, `tenant_palette`
   (`[{id, name, light, dark, is_remainder}]`), `settings`, `flashes`.
 - Formatting lives in `app.formatting` (pure; also used for Czech messages built in `app.domain`):
-  `format_number`, `format_reading` (as read: up to 3 decimals, no trailing zeros), `format_kwh`, `format_date`.
+  `format_number`, `format_reading` (as read: up to 3 decimals, no trailing zeros), `format_kwh`,
+  `format_date` (`3.7.2026`, `3.7.` without the year – never with spaces), `format_month` (`7.2026`),
+  `format_datetime` (`3.7.2026 14:05`); quality marks: `is_marked(quality)` / `quality_mark(quality)` – only
+  `provisional` gets the mark `≈`, interpolated (`estimated`) values are shown like exact ones.
 - Filters: `|num(decimals)`, `|kwh(decimals)` (cs-CZ: NBSP thousands, decimal comma, "–" for None),
   `|reading`, `|decimals` (number of decimals actually stored),
-  `|date_cs`, `|datetime_cs`, `|qvalue(decimals, unit=False)` (≈ + italics + tooltip for non-exact
-  values), `|quality_title`. Globals: `Quality`, `QUALITY_LABELS`.
-- `{% import "_macros.html" as ui with context %}`: `csrf_field`, `num`, `kwh`, `qv`, `badge`,
-  `quality_badge`, `source_badge`, `tenant`, `table`, `field`, `select`, `textarea`, `checkbox`,
+  `|date_cs`, `|month_cs`, `|datetime_cs`, `|qvalue(decimals, unit=False)` (≈ + italics + tap tooltip for
+  provisional values only; others plain with a hover title), `|qmark`, `|quality_title`. Globals: `Quality`,
+  `QUALITY_LABELS`, `REMAINDER_TARIFF_NOTE`.
+- `{% import "_macros.html" as ui with context %}`: `csrf_field`, `num`, `kwh`, `qv`, `reg_qv(value, is_remainder)`
+  + `remainder_note()` (the remainder tenant is shown only as T1+T2: its T1/T2 cells are "–" with an explanation;
+  `reports/_macros.html` has `reg_qd` for snapshot dicts), `badge`, `quality_badge` (provisional only), `source_badge`, `tenant`, `table`, `field`, `select`, `textarea`, `checkbox`,
   `page_header` (call-block for actions), `alert_box`.
 - Tenant colours: CSS variables `--tenant-<id>` (switch with `prefers-color-scheme`); in JS
   `lkhc.tenantColors()` → `{ "<id>": {name, color, light, dark} }`. Other JS helpers:
-  `lkhc.fmtNumber(v, decimals)`, `lkhc.fmtKwh`, `lkhc.isDark()`, `lkhc.cssVar(name)`.
+  `lkhc.fmtNumber(v, decimals)`, `lkhc.fmtKwh`, `lkhc.fmtDate` / `fmtDateTime` / `fmtMonth` (same formats as the
+  server filters; never `toLocale*String("cs-CZ")`, which adds spaces), `lkhc.isDark()`, `lkhc.cssVar(name)`.
 - Vendored: `/static/vendor/htmx-2.0.4.min.js`, `alpinejs-3.14.8.min.js` (both loaded by base.html),
   `chart-4.4.7.umd.min.js` (load it in your page's `scripts` block).
 - `app.templating.render_stub(request, title, active_nav, description)` renders the placeholder page.

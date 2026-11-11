@@ -45,7 +45,7 @@
         <tr>
           <th scope="col" rowspan="2">Nájemce</th>
           <th scope="colgroup" colspan="3" class="num group-start">Poslední měsíc</th>
-          <th scope="colgroup" colspan="3" class="num group-start">Od 1. 1. {{ year }}</th>
+          <th scope="colgroup" colspan="3" class="num group-start">Od 1.1.{{ year }}</th>
           <th scope="col" rowspan="2" class="num group-start" title="Stejné období loni ({{ prev_start|date_cs }} – {{ prev_end|date_cs }})">Loni<br><span class="muted small">stejné obd.</span></th>
         </tr>
         <tr>
@@ -57,11 +57,11 @@
         {% for r in rows %}
         <tr>
           <th scope="row"><a href="/najemci/{{ r.tenant.id }}">{{ ui.tenant(r.tenant) }}</a>{% if r.tenant.is_remainder %} <span class="muted small" title="Zbytek = hlavní elektroměr − ostatní nájemci">(zbytek)</span>{% endif %}</th>
-          <td class="num group-start">{{ r.last.T1|qvalue }}</td>
-          <td class="num">{{ r.last.T2|qvalue }}</td>
+          <td class="num group-start">{{ ui.reg_qv(r.last.T1, r.tenant.is_remainder) }}</td>
+          <td class="num">{{ ui.reg_qv(r.last.T2, r.tenant.is_remainder) }}</td>
           <td class="num strong">{{ r.last.total|qvalue }}</td>
-          <td class="num group-start">{{ r.ytd.T1|qvalue }}</td>
-          <td class="num">{{ r.ytd.T2|qvalue }}</td>
+          <td class="num group-start">{{ ui.reg_qv(r.ytd.T1, r.tenant.is_remainder) }}</td>
+          <td class="num">{{ ui.reg_qv(r.ytd.T2, r.tenant.is_remainder) }}</td>
           <td class="num strong">{{ r.ytd.total|qvalue }}</td>
           <td class="num group-start">{{ r.prev|qvalue if r.prev else '–' }}</td>
         </tr>
@@ -85,8 +85,8 @@
     <table class="data sticky-first compact">
       <thead><tr>
         <th scope="col">Nájemce</th>
-        <th scope="col" class="num">{{ lm_start.month }}/{{ lm_start.year }}</th>
-        <th scope="col" class="num">Od 1. 1.</th>
+        <th scope="col" class="num">{{ lm_start|month_cs }}</th>
+        <th scope="col" class="num">Od 1.1.</th>
         <th scope="col" class="num">Loni</th>
       </tr></thead>
       <tbody>
@@ -103,6 +103,7 @@
     </table>
   </div>
   <p class="muted small only-narrow">T1+T2 v kWh; rozpad na tarify na širší obrazovce nebo v <a href="/spotreba">Spotřebě</a>.</p>
+  {% if rows|selectattr('tenant.is_remainder')|list %}<div class="only-wide">{{ ui.remainder_note() }}</div>{% endif %}
   {{ rm.quality_legend("Hodnoty v kWh, zarovnané na kalendářní měsíce.") }}
 </section>
 
@@ -122,7 +123,7 @@
       <thead><tr>
         <th scope="col">Měřák</th><th scope="col">Tarif</th>
         <th scope="col" class="num group-start">Měřák<br><span class="muted small">posl. měsíc</span></th><th scope="col" class="num">Σ podružné</th><th scope="col" class="num">Rozdíl</th>
-        <th scope="col" class="num group-start">Měřák<br><span class="muted small">od 1. 1.</span></th><th scope="col" class="num">Σ podružné</th><th scope="col" class="num">Rozdíl</th>
+        <th scope="col" class="num group-start">Měřák<br><span class="muted small">od 1.1.</span></th><th scope="col" class="num">Σ podružné</th><th scope="col" class="num">Rozdíl</th>
       </tr></thead>
       <tbody>
         {% for b in balance %}

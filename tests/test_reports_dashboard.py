@@ -46,7 +46,13 @@ def test_dashboard_numbers_match_services(imported_reader_client, imported_db: S
     v = ytd.tenant_total(tenant_b.id)
     # the hangar meter of tenant B has no reading since 2.8.2025 -> B's values are provisional and marked so
     assert v.quality.value == "provisional"
-    assert f"≈?{format_number(v.value)}" in html
+    assert f"≈{format_number(v.value)}" in html and "≈?" not in html
+    # interpolated (estimated) values are shown like exact ones, without a mark
+    estimated = [ytd.tenant_total(t.id) for t in net.tenants if ytd.tenant_total(t.id).quality.value == "estimated"]
+    assert estimated
+    for va in estimated:
+        assert format_number(va.value) in html and f"≈{format_number(va.value)}" not in html
+    assert "q-estimated" not in html
     # chart data per tenant equals the aligned monthly table
     chart = _chart(html, "chart-monthly-data")
     assert chart["year"] == 2026 and len(chart["labels"]) == 12

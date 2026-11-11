@@ -1,7 +1,8 @@
 """XLSX / CSV export helpers for the reports pages (consumption tables, settlements).
 
 Quality is never conveyed by styling alone: every exported value table carries a
-quality column (or a long-format sheet with one) and a legend.
+quality column (or a long-format sheet with one) and a legend. Only provisional (extrapolated)
+values are marked; interpolated ones are written like exact ones.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from app.formatting import is_marked
 from app.services.reports import QUALITY_LEGEND, QUALITY_SHORT
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -27,10 +29,7 @@ CSV_MIME = "text/csv; charset=utf-8"
 BOLD = Font(bold=True)
 TITLE = Font(bold=True, size=14)
 MUTED = Font(color="666666", italic=True)
-FILLS = {
-    "estimated": PatternFill("solid", fgColor="FDF1D6"),
-    "provisional": PatternFill("solid", fgColor="FBE4E2"),
-}
+PROVISIONAL_FILL = PatternFill("solid", fgColor="FBE4E2")
 HEADER_FILL = PatternFill("solid", fgColor="F0EFEC")
 NUM_FMT = "#,##0"
 NUM_FMT_3 = "#,##0.###"
@@ -85,22 +84,22 @@ def write_legend(ws: Worksheet, row: int, *, raw: bool = False) -> int:
     ws.cell(
         row=row,
         column=1,
-        value="Odhadnuté a předběžné buňky jsou podbarvené a mají komentář s původem; kvalitu uvádí i sloupec "
-        "„Kvalita“.",
+        value="Předběžné buňky jsou podbarvené a mají komentář s původem; uvádí je i sloupec „Kvalita“. "
+        "Hodnoty interpolované mezi dvěma skutečnými odečty se neoznačují.",
     ).font = MUTED
     return row + 2
 
 
 def write_q(ws: Worksheet, row: int, col: int, q: dict[str, Any] | None, fmt: str = NUM_FMT) -> None:
-    """Write a snapshot-style value {value, quality, title} with fill + comment for non-exact values."""
+    """Write a snapshot-style value {value, quality, title}; provisional values get a fill + provenance comment."""
     if q is None:
         ws.cell(row=row, column=col, value=None)
         return
     c = ws.cell(row=row, column=col, value=to_num(q.get("value")))
     c.number_format = fmt
     quality = q.get("quality", "exact")
-    if quality in FILLS:
-        c.fill = FILLS[quality]
+    if is_marked(quality):
+        c.fill = PROVISIONAL_FILL
         c.font = Font(italic=True)
         title = plain(q.get("title") or QUALITY_SHORT.get(quality, ""))
         if title:

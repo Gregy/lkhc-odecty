@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,9 +38,10 @@ from app.services.reports import (
     data_coverage,
     document_tenant,
     document_tenant_meters,
+    quality_label,
     settlement_document,
 )
-from app.templating import flash, format_date, templates
+from app.templating import REMAINDER_TARIFF_NOTE, flash, format_date, is_marked, templates
 
 router = APIRouter(prefix="/vyuctovani", dependencies=[Depends(require_user)])
 
@@ -357,7 +359,7 @@ def _date(v: Any) -> str:
     if not v:
         return ""
     dt = v if isinstance(v, (date, datetime)) else datetime.fromisoformat(str(v))
-    return format_date(dt).replace("\xa0", " ")
+    return format_date(dt)
 
 
 def _info_rows(ws, s: Settlement, doc: dict[str, Any], title: str) -> int:
@@ -376,9 +378,22 @@ def _info_rows(ws, s: Settlement, doc: dict[str, Any], title: str) -> int:
     return write_legend(ws, 7)
 
 
+def _tenant_regs(t: dict[str, Any], t1: Any, t2: Any) -> list[Any]:
+    """T1/T2 values of a tenant for a table; the remainder tenant is shown only as T1+T2 (empty T1/T2)."""
+    return [None, None] if t.get("is_remainder") else [t1, t2]
+
+
+def _remainder_note(ws, row: int, doc: dict[str, Any]) -> int:
+    """Explanatory line when the document has a remainder tenant; returns the next free row."""
+    if not any(t.get("is_remainder") for t in doc.get("tenants", [])):
+        return row
+    ws.cell(row=row, column=1, value="Zbytek je uveden jen v součtu T1+T2: " + REMAINDER_TARIFF_NOTE).font = MUTED
+    return row + 2
+
+
 def _write_q_with_quality(ws, row: int, col: int, q: dict[str, Any] | None) -> None:
     write_q(ws, row, col, q)
-    ws.cell(row=row, column=col + 1, value=QUALITY_SHORT.get((q or {}).get("quality", "exact"), ""))
+    ws.cell(row=row, column=col + 1, value=quality_label((q or {}).get("quality", "exact")))
 
 
 @router.get("/{settlement_id}/export.xlsx", name="vyuctovani_xlsx")
@@ -391,12 +406,19 @@ def export_xlsx(request: Request, settlement_id: int, db: DbSession, user: Curre
     ws.title = sheet_title("Souhrn", used)
     row = _info_rows(ws, s, doc, s.name)
     tenants = doc["tenants"]
+    row = _remainder_note(ws, row - 1, doc)
     header = ["Období", "Od", "Do"]
     for t in tenants:
         header += [f"{t['name']} T1", f"{t['name']} T2", f"{t['name']} celkem", f"{t['name']} kvalita"]
     header += ["Hlavní T1", "Hlavní T2", "Hlavní kvalita"]
     write_header(ws, row, header)
     hdr = row
+    col = 4
+    for t in tenants:
+        if t.get("is_remainder"):
+            for c in (col, col + 1):
+                ws.cell(row=row, column=c).comment = Comment(REMAINDER_TARIFF_NOTE, "LKHC Odečty")
+        col += 4
     for i, p in enumerate(doc["periods"]):
         row += 1
         ws.cell(row=row, column=1, value=p["label"])
@@ -404,32 +426,32 @@ def export_xlsx(request: Request, settlement_id: int, db: DbSession, user: Curre
         ws.cell(row=row, column=3, value=_date(p["end"]))
         col = 4
         for t in tenants:
-            cells = [t["periods"]["T1"][i], t["periods"]["T2"][i], t["period_totals"][i]]
+            cells = [*_tenant_regs(t, t["periods"]["T1"][i], t["periods"]["T2"][i]), t["period_totals"][i]]
             for q in cells:
                 write_q(ws, row, col, q)
                 col += 1
-            ws.cell(row=row, column=col, value=QUALITY_SHORT[worst_quality(cells)])
+            ws.cell(row=row, column=col, value=quality_label(worst_quality(cells)))
             col += 1
         mcells = [doc["period_main"]["T1"][i], doc["period_main"]["T2"][i]]
         for q in mcells:
             write_q(ws, row, col, q)
             col += 1
-        ws.cell(row=row, column=col, value=QUALITY_SHORT[worst_quality(mcells)])
+        ws.cell(row=row, column=col, value=quality_label(worst_quality(mcells)))
     row += 1
     ws.cell(row=row, column=1, value="Celkem").font = BOLD
     col = 4
     for t in tenants:
-        cells = [t["totals"]["T1"], t["totals"]["T2"], t["total"]]
+        cells = [*_tenant_regs(t, t["totals"]["T1"], t["totals"]["T2"]), t["total"]]
         for q in cells:
             write_q(ws, row, col, q)
             ws.cell(row=row, column=col).font = BOLD
             col += 1
-        ws.cell(row=row, column=col, value=QUALITY_SHORT[worst_quality(cells)])
+        ws.cell(row=row, column=col, value=quality_label(worst_quality(cells)))
         col += 1
     for reg in ("T1", "T2"):
         write_q(ws, row, col, doc["main"][reg])
         col += 1
-    ws.cell(row=row, column=col, value=QUALITY_SHORT[worst_quality(doc["main"].values())])
+    ws.cell(row=row, column=col, value=quality_label(worst_quality(doc["main"].values())))
     ws.freeze_panes = ws.cell(row=hdr + 1, column=2)
     row += 2
     check = doc.get("check", {})
@@ -439,25 +461,23 @@ def export_xlsx(request: Request, settlement_id: int, db: DbSession, user: Curre
             row += 1
             ws.cell(row=row, column=1, value=msg)
         row += 2
-    if check.get("estimated"):
-        ws.cell(row=row, column=1, value="Odhadnuté stavy na hranicích (interpolace):").font = BOLD
-        for msg in check["estimated"]:
-            row += 1
-            ws.cell(row=row, column=1, value=msg).font = MUTED
     autosize(ws)
 
     for td in tenants:
         ws = wb.create_sheet(sheet_title(td["name"], used))
         row = _info_rows(ws, s, doc, f"{s.name} – {td['name']}")
         write_header(ws, row, ["Tarif", "kWh", "Kvalita", "Odhadnuto kWh", "Původ"])
-        for reg, q in (("T1", td["totals"]["T1"]), ("T2", td["totals"]["T2"]), ("Celkem", td["total"])):
+        t1, t2 = _tenant_regs(td, td["totals"]["T1"], td["totals"]["T2"])
+        for reg, q in (("T1", t1), ("T2", t2), ("Celkem", td["total"])):
             row += 1
             ws.cell(row=row, column=1, value=reg)
+            if q is None:  # remainder tenant: only T1+T2
+                ws.cell(row=row, column=5, value="jen v součtu T1+T2: " + REMAINDER_TARIFF_NOTE)
+                continue
             _write_q_with_quality(ws, row, 2, q)
-            ws.cell(row=row, column=4, value=to_num(q.get("estimated_kwh")))
-            ws.cell(
-                row=row, column=5, value=plain(q.get("title")).replace("\n", "; ") if q["quality"] != "exact" else ""
-            )
+            marked = is_marked(q["quality"])
+            ws.cell(row=row, column=4, value=to_num(q.get("estimated_kwh")) if marked else None)
+            ws.cell(row=row, column=5, value=plain(q.get("title")).replace("\n", "; ") if marked else "")
         row += 2
         meters = _protocol_meters(doc, td)
         ws.cell(row=row, column=1, value="Hlavní elektroměr" if td.get("is_remainder") else "Elektroměry").font = BOLD
@@ -495,7 +515,7 @@ def export_xlsx(request: Request, settlement_id: int, db: DbSession, user: Curre
                     {"value": b["value"], "quality": b["quality"], "title": b.get("title", "")},
                     "#,##0.###",
                 )
-                ws.cell(row=row, column=col + 1, value=QUALITY_SHORT.get(b["quality"], ""))
+                ws.cell(row=row, column=col + 1, value=quality_label(b["quality"]))
                 ws.cell(row=row, column=col + 2, value=plain(b.get("title", "")))
             _write_q_with_quality(ws, row, 10, m["consumption"])
             ws.cell(row=row, column=12, value=_date(m.get("installed_on")))
@@ -506,20 +526,25 @@ def export_xlsx(request: Request, settlement_id: int, db: DbSession, user: Curre
             rem = td["remainder"]
             ws.cell(row=row, column=1, value="Výpočet zbytku").font = BOLD
             row += 1
-            write_header(ws, row, ["Složka", "T1", "Kvalita", "T2", "Kvalita"])
-            lines = [("Hlavní elektroměr", rem["main"])] + [(f"− {o['name']}", o["values"]) for o in rem["others"]]
-            lines.append((f"= {td['name']}", td["totals"]))
-            for label, vals in lines:
+            # T1+T2 only: per tariff the remainder is distorted by single-tariff sub-meters
+            write_header(ws, row, ["Složka", "kWh (T1+T2)", "Kvalita"])
+            totals = {t["id"]: t["total"] for t in tenants}
+            lines = [("Hlavní elektroměr", doc.get("main_total"))]
+            lines += [(f"− {o['name']}", totals.get(o["tenant_id"])) for o in rem["others"]]
+            lines.append((f"= {td['name']}", td["total"]))
+            for label, total in lines:
                 row += 1
                 ws.cell(row=row, column=1, value=label)
-                sign = -1 if label.startswith("−") else 1
-                for col, reg in ((2, "T1"), (4, "T2")):
-                    q = dict(vals[reg])
-                    q["value"] = d(q["value"]) * sign
-                    _write_q_with_quality(ws, row, col, q)
+                if total is None:
+                    continue
+                q = dict(total)
+                q["value"] = d(q["value"]) * (-1 if label.startswith("−") else 1)
+                _write_q_with_quality(ws, row, 2, q)
             if rem.get("unallocated"):
                 row += 2
                 ws.cell(row=row, column=1, value="Z toho nealokovaná místa (informativně)").font = BOLD
+                row += 1
+                write_header(ws, row, ["Místo", "T1", "Kvalita", "T2", "Kvalita"])
                 for u in rem["unallocated"]:
                     row += 1
                     ws.cell(row=row, column=1, value=u["point_name"])
@@ -560,8 +585,9 @@ def export_xlsx(request: Request, settlement_id: int, db: DbSession, user: Curre
         for i, p in enumerate(doc["periods"]):
             row += 1
             ws.cell(row=row, column=1, value=p["label"])
-            _write_q_with_quality(ws, row, 2, td["periods"]["T1"][i])
-            _write_q_with_quality(ws, row, 4, td["periods"]["T2"][i])
+            if not td.get("is_remainder"):  # remainder: only T1+T2
+                _write_q_with_quality(ws, row, 2, td["periods"]["T1"][i])
+                _write_q_with_quality(ws, row, 4, td["periods"]["T2"][i])
             _write_q_with_quality(ws, row, 6, td["period_totals"][i])
         autosize(ws)
     fname = f"vyuctovani-{s.year or s.period_start.year}-{'final' if s.status == 'final' else 'navrh'}.xlsx"

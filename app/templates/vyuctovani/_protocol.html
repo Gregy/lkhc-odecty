@@ -30,14 +30,15 @@
       <tbody>
         <tr>
           <th scope="row"><strong>{{ td.name }}</strong></th>
-          <td class="num strong">{{ rm.qd(td.totals.T1, 0, true) }}</td>
-          <td class="num strong">{{ rm.qd(td.totals.T2, 0, true) }}</td>
+          <td class="num strong">{{ rm.reg_qd(td.totals.T1, td.is_remainder, 0, true) }}</td>
+          <td class="num strong">{{ rm.reg_qd(td.totals.T2, td.is_remainder, 0, true) }}</td>
           <td class="num strong">{{ rm.qd(td.total, 0, true) }}</td>
           <td>{{ rm.qbadge(td.total.quality, td.total.title) }}</td>
         </tr>
       </tbody>
     </table>
   </div>
+  {% if td.is_remainder %}{{ ui.remainder_note() }}{% endif %}
 
   {% if meters %}
   <h{{ heading_level + 1 }}>{{ 'Hlavní elektroměr' if td.is_remainder else 'Elektroměry' }}</h{{ heading_level + 1 }}>
@@ -58,8 +59,9 @@
           <td class="num">{{ rm.state(m.end, m.decimals_shown or 0) }}<br><span class="muted small">{{ dt(m.end.t) }}</span></td>
           <td class="num strong">{{ rm.qd(m.consumption) }}</td>
           <td class="wrap small">
-            {% if m.start.quality != 'exact' %}<div>Počátek: {{ m.start.title }}</div>{% elif m.start.method != 'reading' %}<div class="muted">Počátek: {{ m.start.title }}</div>{% endif %}
-            {% if m.end.quality != 'exact' %}<div>Konec: {{ m.end.title }}</div>{% elif m.end.method != 'reading' %}<div class="muted">Konec: {{ m.end.title }}</div>{% endif %}
+            {#- provenance of a state that is not a reading on that day; only provisional (extrapolated) ones are emphasized #}
+            {% if m.start.quality|qmark %}<div>Počátek: {{ m.start.title }}</div>{% elif m.start.method != 'reading' %}<div class="muted">Počátek: {{ m.start.title }}</div>{% endif %}
+            {% if m.end.quality|qmark %}<div>Konec: {{ m.end.title }}</div>{% elif m.end.method != 'reading' %}<div class="muted">Konec: {{ m.end.title }}</div>{% endif %}
             {% if m.installed_on and m.installed_on|string > doc.start|string %}<div><strong>Nový elektroměr</strong> od {{ dt(m.installed_on) }}</div>{% endif %}
             {% if m.removed_on and m.removed_on|string < doc.end|string %}<div><strong>Vyměněn / odebrán</strong> {{ dt(m.removed_on) }}</div>{% endif %}
             {% if m.note %}<div class="muted">{{ m.note }}</div>{% endif %}
@@ -75,14 +77,16 @@
   <h{{ heading_level + 1 }}>Výpočet zbytku</h{{ heading_level + 1 }}>
   <div class="table-wrap">
     <table class="data compact">
-      <thead><tr><th scope="col">Složka</th><th scope="col" class="num">T1</th><th scope="col" class="num">T2</th></tr></thead>
+      {#- T1+T2 only: per tariff the remainder is distorted by single-tariff sub-meters (REMAINDER_TARIFF_NOTE) #}
+      <thead><tr><th scope="col">Složka</th><th scope="col" class="num" title="{{ REMAINDER_TARIFF_NOTE }}">kWh (T1+T2)</th></tr></thead>
       <tbody>
-        <tr><th scope="row">Hlavní elektroměr</th><td class="num">{{ rm.qd(td.remainder.main.T1) }}</td><td class="num">{{ rm.qd(td.remainder.main.T2) }}</td></tr>
+        <tr><th scope="row">Hlavní elektroměr</th><td class="num">{{ rm.qd(doc.main_total) }}</td></tr>
         {% for o in td.remainder.others %}
-        <tr><th scope="row">− {{ o.name }}</th><td class="num">{{ rm.qd(o['values'].T1) }}</td><td class="num">{{ rm.qd(o['values'].T2) }}</td></tr>
+        {% set ot = doc.tenants|selectattr('id', 'equalto', o.tenant_id)|first %}
+        <tr><th scope="row">− {{ o.name }}</th><td class="num">{{ rm.qd(ot.total if ot else none) }}</td></tr>
         {% endfor %}
       </tbody>
-      <tfoot><tr><th scope="row">= {{ td.name }}</th><td class="num">{{ rm.qd(td.totals.T1) }}</td><td class="num">{{ rm.qd(td.totals.T2) }}</td></tr></tfoot>
+      <tfoot><tr><th scope="row">= {{ td.name }}</th><td class="num">{{ rm.qd(td.total) }}</td></tr></tfoot>
     </table>
   </div>
   {% if td.remainder.unallocated %}
@@ -110,10 +114,9 @@
   </div>
   {% endif %}
 
-  {% if td.total.quality != 'exact' %}
+  {% if td.total.quality|qmark %}
   <p class="small"><strong>Kvalita:</strong>
-    {% if td.total.quality == 'provisional' %}obsahuje <strong>předběžné</strong> hodnoty (extrapolace – chybí pozdější odečet), výsledek se ještě změní.
-    {% else %}část stavů na hranicích je <strong>odhadnuta</strong> interpolací mezi skutečnými odečty (viz poznámky u elektroměrů).{% endif %}
+    obsahuje <strong>předběžné</strong> hodnoty (extrapolace za posledním odečtem – chybí pozdější odečet), výsledek se ještě změní.
     {% if td.total.estimated_kwh and (td.total.estimated_kwh|float) > 0 %}Odhadnutá část: {{ td.total.estimated_kwh|num }} kWh.{% endif %}
     {% if td.is_remainder %}Zbytek přebírá kvalitu hlavního elektroměru i všech ostatních nájemců.{% endif %}
   </p>

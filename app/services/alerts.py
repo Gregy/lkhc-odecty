@@ -9,13 +9,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.aligned import add_months, month_start
+from app.formatting import NBSP, format_date, format_number, is_marked
 from app.models import Photo, Reading
 from app.services.consumption import control_balances, tenant_consumption_table
 from app.services.network import Network, load_network
 from app.services.readings import meter_anomalies, meter_staleness
 
 SEVERITIES = ("info", "warning", "error")
-_QUALITY_CS = {"exact": "přesně", "estimated": "odhad", "provisional": "předběžně"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,8 +40,8 @@ def alerts(
 ) -> list[Alert]:
     """All current alerts, most severe first.
 
-    Negative remainders and control balances are evaluated on aligned monthly periods
-    of the last ``months_back`` complete months that have any data.
+    Negative remainders (on T1+T2 of the remainder tenant) and control balances are evaluated on aligned
+    monthly periods of the last ``months_back`` complete months that have any data.
     """
     net = net or load_network(db)
     now = now or datetime.now()
@@ -77,7 +77,7 @@ def alerts(
                 "anomaly",
                 sev,
                 f"{a.point_name} ({a.meter.serial}) {a.register}, "
-                f"{a.anomaly.curr.taken_at:%d.%m.%Y}: {a.anomaly.message}",
+                f"{format_date(a.anomaly.curr.taken_at)}: {a.anomaly.message}",
                 a.meter.id,
                 a.meter.meter_point_id,
                 at=a.anomaly.curr.taken_at,
@@ -92,16 +92,22 @@ def alerts(
         if start < end:
             table = tenant_consumption_table(db, start=start, end=end, net=net)
             rem = next((t for t in table.tenants if t.is_remainder), None)
-            for i, reg in table.negative_remainders():
-                v = table.values[rem.id][reg][i] if rem else None
+            # Evaluated on T1+T2: single-tariff sub-meters count fully into T1, so the remainder's T1 alone is
+            # too low (even negative in winter) and its T2 too high - only the sum is meaningful.
+            for i in range(len(table.periods)):
+                if rem is None:
+                    break
+                v = table.total(rem.id, i)
+                if v.value >= 0:
+                    continue
                 out.append(
                     Alert(
                         "negative_remainder",
                         "warning",
-                        f"Záporný zbytek {rem.name if rem else ''} {reg} v období {table.periods[i].label}: "
-                        f"{f'{v.value:.0f}' if v else ''} kWh "
-                        f"(kvalita: {_QUALITY_CS.get(v.quality.value, '') if v else ''}).",
-                        tenant_id=rem.id if rem else None,
+                        f"Záporný zbytek {rem.name} (T1+T2) v období {table.periods[i].label}: "
+                        f"{format_number(v.value)}{NBSP}kWh"
+                        f"{' (předběžně – extrapolace za posledním odečtem)' if is_marked(v.quality) else ''}.",
+                        tenant_id=rem.id,
                         at=table.periods[i].start,
                         link="/spotreba",
                     )

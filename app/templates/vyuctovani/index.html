@@ -36,8 +36,8 @@
       </div>
       {{ ui.field('name', 'Název', '', help='Výchozí „Vyúčtování ROK“.') }}
       <div></div>
-      {{ ui.field('period_start', 'Vlastní začátek', '', type='date', help='Nepovinné – jinak 1. 1. zvoleného roku.') }}
-      {{ ui.field('period_end', 'Vlastní konec', '', type='date', help='Nepovinné – jinak 1. 1. dalšího roku.') }}
+      {{ ui.field('period_start', 'Vlastní začátek', '', type='date', help='Nepovinné – jinak 1.1. zvoleného roku.') }}
+      {{ ui.field('period_end', 'Vlastní konec', '', type='date', help='Nepovinné – jinak 1.1. dalšího roku.') }}
       <div class="span-2">{{ ui.textarea('note', 'Poznámka', '', rows=2) }}</div>
     </div>
     {% include "vyuctovani/_bounds.html" %}

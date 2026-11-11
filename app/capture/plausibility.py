@@ -13,6 +13,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.domain.anomalies import PlausibilityIssue
+from app.formatting import format_date
 from app.models import Meter
 from app.services.readings import check_new_reading, meter_expected_range
 from app.templating import format_number
@@ -76,10 +77,10 @@ def check_value(
         issues.append(Issue("register", "error", f"Elektroměr {meter.serial} nemá registr {register}."))
     if meter.installed_on and at_d < meter.installed_on:
         issues.append(
-            Issue("inactive", "warning", f"Datum je před instalací elektroměru ({meter.installed_on:%d.%m.%Y}).")
+            Issue("inactive", "warning", f"Datum je před instalací elektroměru ({format_date(meter.installed_on)}).")
         )
     if meter.removed_on and at_d > meter.removed_on:
-        issues.append(Issue("inactive", "warning", f"Elektroměr byl odebrán {meter.removed_on:%d.%m.%Y}."))
+        issues.append(Issue("inactive", "warning", f"Elektroměr byl odebrán {format_date(meter.removed_on)}."))
     domain = check_new_reading(db, meter.id, register, value, at, exclude_reading_id=exclude_reading_id)
     issues.extend(Issue.of(p) for p in domain)
     er = meter_expected_range(db, meter.id, register, at_d)

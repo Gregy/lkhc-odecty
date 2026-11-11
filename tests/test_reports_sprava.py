@@ -14,7 +14,6 @@ from app.models import Allocation, AuditLog, Meter, MeterPoint, Reading, Tenant,
 from tests import synthetic as syn
 
 PAGES = [
-    "/sprava",
     "/sprava/najemci",
     "/sprava/najemci/2",
     "/sprava/mista",
@@ -33,9 +32,20 @@ def test_pages_admin_ok_reader_forbidden(url, imported_admin_client, imported_re
     assert imported_reader_client.get(url).status_code == 403, url
 
 
-def test_nav_hides_sprava_for_reader(imported_reader_client, imported_admin_client) -> None:
-    assert 'href="/sprava"' not in imported_reader_client.get("/").text
+def test_sprava_landing_admin_and_reader(imported_reader_client, imported_admin_client) -> None:
+    # the landing page is open to readers, but shows only the read-only pages (Místa, Nájemci, Fotky)
+    assert 'href="/sprava"' in imported_reader_client.get("/").text
     assert 'href="/sprava"' in imported_admin_client.get("/").text
+    reader = imported_reader_client.get("/sprava")
+    assert reader.status_code == 200
+    for url in ("/mista", "/najemci", "/fotky"):
+        assert f'href="{url}"' in reader.text
+    for url in ("/sprava/najemci", "/sprava/mista", "/sprava/alokace", "/sprava/uzivatele", "/sprava/audit"):
+        assert f'href="{url}"' not in reader.text
+    assert "Poslední změny" not in reader.text  # audit log stays admin only
+    admin = imported_admin_client.get("/sprava").text
+    for url in ("/mista", "/najemci", "/fotky", "/sprava/alokace", "/sprava/uzivatele", "/sprava/audit"):
+        assert f'href="{url}"' in admin
 
 
 def _audit(db: Session, entity: str, action: str) -> list[AuditLog]:

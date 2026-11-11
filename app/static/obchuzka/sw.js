@@ -11,7 +11,7 @@
  */
 "use strict";
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE = "lkhc-obchuzka-" + CACHE_VERSION;
 const SHELL = "/obchuzka/";
 const ASSETS = [

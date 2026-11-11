@@ -27,20 +27,13 @@
 </section>
 
 {% set check = doc.check %}
-{% if check.provisional or check.estimated %}
+{#- interpolated (estimated) boundary states are allowed and not listed; only provisional ones are shown #}
+{% if check.provisional %}
 <section class="card">
   <h2 class="card-title">Kontrola hranic období</h2>
-  {% if check.provisional %}
   <div class="alert alert-error"><span><strong>Předběžné stavy ({{ check.provisional|length }})</strong> – na hranici chybí pozdější odečet, hodnota je extrapolovaná.
     {% if s.status == 'draft' %}Dokud nejsou doplněny odečty, finalizace je blokovaná (lze ji vědomě vynutit s poznámkou).{% endif %}</span></div>
   <ul class="issues">{% for m in check.provisional %}<li>{{ m }}</li>{% endfor %}</ul>
-  {% endif %}
-  {% if check.estimated %}
-  <details{% if check.estimated|length <= 6 %} open{% endif %}>
-    <summary><strong>Odhadnuté stavy ({{ check.estimated|length }})</strong> – interpolace mezi skutečnými odečty; povoleno, protokol to u elektroměru uvádí.</summary>
-    <ul class="issues small">{% for m in check.estimated %}<li>{{ m }}</li>{% endfor %}</ul>
-  </details>
-  {% endif %}
 </section>
 {% endif %}
 
@@ -65,7 +58,7 @@
         <tr>
           <th scope="row" class="nowrap">{{ per.label }}</th>
           {% for t in doc.tenants %}
-          <td class="num group-start">{{ rm.qd(t.periods.T1[i]) }}</td><td class="num">{{ rm.qd(t.periods.T2[i]) }}</td><td class="num strong">{{ rm.qd(t.period_totals[i]) }}</td>
+          <td class="num group-start">{{ rm.reg_qd(t.periods.T1[i], t.is_remainder) }}</td><td class="num">{{ rm.reg_qd(t.periods.T2[i], t.is_remainder) }}</td><td class="num strong">{{ rm.qd(t.period_totals[i]) }}</td>
           {% endfor %}
           <td class="num group-start">{{ rm.qd(doc.period_main.T1[i]) }}</td><td class="num">{{ rm.qd(doc.period_main.T2[i]) }}</td>
         </tr>
@@ -75,13 +68,14 @@
         <tr>
           <th scope="row">Celkem</th>
           {% for t in doc.tenants %}
-          <td class="num group-start">{{ rm.qd(t.totals.T1) }}</td><td class="num">{{ rm.qd(t.totals.T2) }}</td><td class="num">{{ rm.qd(t.total) }}</td>
+          <td class="num group-start">{{ rm.reg_qd(t.totals.T1, t.is_remainder) }}</td><td class="num">{{ rm.reg_qd(t.totals.T2, t.is_remainder) }}</td><td class="num">{{ rm.qd(t.total) }}</td>
           {% endfor %}
           <td class="num group-start">{{ rm.qd(doc.main.T1) }}</td><td class="num">{{ rm.qd(doc.main.T2) }}</td>
         </tr>
       </tfoot>
     </table>
   </div>
+  {% if doc.tenants|selectattr('is_remainder')|list %}{{ ui.remainder_note() }}{% endif %}
   {{ rm.quality_legend("Zbytek = hlavní elektroměr − ostatní nájemci.") }}
 </section>
 

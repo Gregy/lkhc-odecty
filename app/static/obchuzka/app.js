@@ -90,7 +90,11 @@
   function fmtDate(iso) {
     if (!iso) return "–";
     const p = iso.slice(0, 10).split("-");
-    return Number(p[2]) + ". " + Number(p[1]) + ". " + p[0];
+    return Number(p[2]) + "." + Number(p[1]) + "." + p[0];
+  }
+  // "3.7.2026 14:05" (explicit: the cs-CZ locale formatting would give "3. 7. 2026 14:05:00")
+  function fmtDateTime(d) {
+    return fmtDate(localIso(d)) + " " + localIso(d).slice(11, 16);
   }
   function parseNum(raw) {
     if (raw === null || raw === undefined) return null;
@@ -446,7 +450,7 @@
     let out = "";
     if (S.banner) out += '<div class="alert alert-' + S.banner.kind + ' walk-banner">' + S.banner.html + "</div>";
     if (S.authProblem) out += '<div class="alert alert-warning walk-banner">Nejste přihlášen(a) – zadané hodnoty zůstávají v telefonu. <a href="/login?next=/obchuzka/">Přihlásit se</a> a pak se vše odešle.</div>';
-    if (!S.online) out += '<div class="alert alert-info walk-banner">Offline – vše se ukládá do telefonu a odešle se, až bude signál.' + (S.dataAge ? " Data míst z " + S.dataAge.toLocaleString("cs-CZ") + "." : "") + "</div>";
+    if (!S.online) out += '<div class="alert alert-info walk-banner">Offline – vše se ukládá do telefonu a odešle se, až bude signál.' + (S.dataAge ? " Data míst z " + fmtDateTime(S.dataAge) + "." : "") + "</div>";
     if (!S.isAdmin && S.data) out += '<div class="alert alert-info walk-banner">Jste přihlášen(a) jako čtenář – odečty můžete jen prohlížet.</div>';
     return out;
   }
@@ -584,7 +588,7 @@
     });
     html += "</ul>";
     html += '<div class="walk-actions"><button class="btn btn-primary" data-sync>Odeslat teď</button><a class="btn" href="#/">Zpět na seznam</a></div>';
-    if (S.lastSync) html += '<p class="muted small">Naposledy odesláno ' + S.lastSync.toLocaleTimeString("cs-CZ") + "</p>";
+    if (S.lastSync) html += '<p class="muted small">Naposledy odesláno ' + localIso(S.lastSync).slice(11, 16) + "</p>";
     app.innerHTML = html;
   }
 

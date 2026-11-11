@@ -168,7 +168,7 @@
           a.href = res.url; a.textContent = files[i].name;
           items[i].appendChild(a);
           items[i].appendChild(document.createTextNode(
-            (res.created ? " – ✓ " : " – už nahráno ") + (res.taken_at ? "pořízeno " + new Date(res.taken_at).toLocaleString("cs-CZ") : "bez času pořízení (datum zadáte v kontrole)")));
+            (res.created ? " – ✓ " : " – už nahráno ") + (res.taken_at ? "pořízeno " + lkhc.fmtDateTime(res.taken_at) : "bez času pořízení (datum zadáte v kontrole)")));
           items[i].className = res.taken_at ? "ok" : "warn";
         } else {
           bad++;

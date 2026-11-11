@@ -39,7 +39,7 @@ def test_corrected_import(
     assert TYPO not in s.reading_dates(db) and FIXED in s.reading_dates(db)
     # the 1.6.-3.7. segment is a normal month: no spike anomaly / alert from it
     assert not [a for a in s.meter_anomalies(db) if a.anomaly.curr.taken_at.date() == FIXED]
-    assert not [a for a in s.alerts(db, now=datetime(2026, 7, 10)) if a.kind == "anomaly" and "03.07.2026" in a.message]
+    assert not [a for a in s.alerts(db, now=datetime(2026, 7, 10)) if a.kind == "anomaly" and "3.7.2026:" in a.message]
     # the correction is reported and the import stays idempotent
     log = db.scalar(select(AuditLog).where(AuditLog.action == "import"))
     assert "3.6.2026 → 3.7.2026" in log.changes["corrections"][0]

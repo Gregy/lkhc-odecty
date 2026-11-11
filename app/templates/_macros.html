@@ -20,9 +20,21 @@
 <span class="num{% if value is not none and value < 0 %} negative{% endif %}">{{ value|kwh(decimals) }}</span>
 {%- endmacro %}
 
-{# Aligned value (QValue) with quality marker (≈ + italics for estimated/provisional) and tooltip. #}
+{# Aligned value (QValue) with quality marker ("≈" + italics, only for provisional = extrapolated values) and tooltip. #}
 {% macro qv(value, decimals=0, unit=false) -%}
 {{ value|qvalue(decimals, unit) }}
+{%- endmacro %}
+
+{# Per-register (T1/T2) value of a tenant: the remainder tenant shows only its T1+T2 total, so its T1/T2 cells
+   are a dash with an explanation (REMAINDER_TARIFF_NOTE). Pair with remainder_note() under the table. #}
+{% macro reg_qv(value, is_remainder, decimals=0, unit=false) -%}
+{%- if is_remainder -%}<span class="num muted remainder-split" title="{{ REMAINDER_TARIFF_NOTE }}">–</span>
+{%- else -%}{{ value|qvalue(decimals, unit) }}{%- endif -%}
+{%- endmacro %}
+
+{# Footnote for tables where the remainder tenant's T1/T2 are left out. #}
+{% macro remainder_note() -%}
+<p class="muted small remainder-note">Zbytek je uveden jen v součtu T1+T2: {{ REMAINDER_TARIFF_NOTE[0]|lower }}{{ REMAINDER_TARIFF_NOTE[1:] }}</p>
 {%- endmacro %}
 
 {# Badge. kind: info | success | warning | error | muted #}
@@ -30,11 +42,9 @@
 <span class="badge{% if kind %} badge-{{ kind }}{% endif %}">{{ text }}</span>
 {%- endmacro %}
 
-{# Quality badge for a Quality value (exact / estimated / provisional). #}
+{# Quality badge for a Quality value: only provisional (extrapolated) gets one; exact / interpolated render nothing. #}
 {% macro quality_badge(q) -%}
-{%- if q == Quality.EXACT -%}<span class="badge badge-success" title="{{ QUALITY_LABELS[q] }}">přesně</span>
-{%- elif q == Quality.ESTIMATED -%}<span class="badge badge-warning" title="{{ QUALITY_LABELS[q] }}">≈ odhad</span>
-{%- else -%}<span class="badge badge-error" title="{{ QUALITY_LABELS[q] }}">≈? předběžně</span>
+{%- if q|qmark -%}<span class="badge badge-error" title="{{ QUALITY_LABELS[q] }}">{{ q|qmark }} předběžně</span>
 {%- endif -%}
 {%- endmacro %}
 

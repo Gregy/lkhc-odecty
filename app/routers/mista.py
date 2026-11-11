@@ -72,7 +72,7 @@ def mista(request: Request, db: DbSession, user: CurrentUser):
         "mista/index.html",
         {
             "page_title": "Měřicí místa",
-            "active_nav": "/mista",
+            "active_nav": "/sprava",
             "rows": rows,
             "cov": cov,
             "today": today,
@@ -177,7 +177,7 @@ def misto(request: Request, point_id: int, db: DbSession, user: CurrentUser):
         "mista/detail.html",
         {
             "page_title": point.name,
-            "active_nav": "/mista",
+            "active_nav": "/sprava",
             "point": point,
             "info": info,
             "meters": meters,

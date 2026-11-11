@@ -19,18 +19,28 @@ from app.services.consumption import REGISTERS
 from app.services.network import Network
 from app.services.periods import MONTHS_CS
 from app.services.settlement import SettlementResult, settlement_snapshot
-from app.templating import format_date, format_number, quality_title
+from app.templating import format_date, format_number, is_marked, quality_title
 
 QUALITY_SHORT = {
     Quality.EXACT.value: "přesně",
     Quality.ESTIMATED.value: "odhad",
     Quality.PROVISIONAL.value: "předběžně",
 }
+# Only provisional (extrapolated) values are marked in views and exports; interpolated ("estimated") values
+# are the normal case and are shown like exact ones (the quality itself is unchanged in the data).
 QUALITY_LEGEND = (
-    ("přesně", "hodnota z odečtů na hranicích období"),
-    ("≈ odhad", "stav na hranici dopočten interpolací mezi dvěma skutečnými odečty"),
-    ("≈? předběžně", "stav na hranici extrapolován – pozdější odečet zatím chybí, hodnota se ještě změní"),
+    (
+        "předběžně",
+        "extrapolovaný, předběžný odhad za posledním odečtem – pozdější odečet zatím chybí, hodnota se ještě změní",
+    ),
 )
+
+
+def quality_label(quality: Any) -> str:
+    """Text of a "Kvalita" column in exports: "předběžně" for provisional values, "" for exact / interpolated."""
+    return QUALITY_SHORT[Quality.PROVISIONAL.value] if is_marked(quality) else ""
+
+
 SNAPSHOT_EXT_VERSION = 1  # version of the reports-side extension keys (doc["reports"])
 
 

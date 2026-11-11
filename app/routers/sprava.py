@@ -1,5 +1,9 @@
-"""Administration (`/sprava`, admin only): tenants, meter points (walk order), meters (incl. replacement),
-allocations, users/roles and the audit log. Every mutation is audited (app.audit)."""
+"""Administration (`/sprava`): tenants, meter points (walk order), meters (incl. replacement),
+allocations, users/roles and the audit log - admin only; every mutation is audited (app.audit).
+
+The landing page `/sprava` itself (`overview_router`) is open to every logged-in user: it also links the
+read-only pages Místa, Nájemci and Fotky (no longer top-level tabs; those pages highlight "Správa" in the main
+navigation). Readers see only those links; the administration sections stay admin only."""
 
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import audit
-from app.deps import AdminUser, DbSession, require_admin
+from app.deps import AdminUser, CurrentUser, DbSession, require_admin, require_user
 from app.domain.consumption import as_datetime
 from app.models import (
     POINT_ROLES,
@@ -26,15 +30,18 @@ from app.models import (
     AuditLog,
     Meter,
     MeterPoint,
+    Photo,
     Reading,
     Tenant,
     User,
 )
 from app.routers._reports_common import parse_int
 from app.sources import available_sources
-from app.templating import flash, format_reading, templates
+from app.templating import flash, format_date, format_reading, templates
 
 router = APIRouter(prefix="/sprava", dependencies=[Depends(require_admin)])
+# only the landing page; readers get the read-only links (Místa, Nájemci, Fotky)
+overview_router = APIRouter(prefix="/sprava", dependencies=[Depends(require_user)])
 
 SECTIONS = [
     ("Přehled", "/sprava"),
@@ -43,6 +50,12 @@ SECTIONS = [
     ("Alokace", "/sprava/alokace"),
     ("Uživatelé", "/sprava/uzivatele"),
     ("Audit", "/sprava/audit"),
+]
+# Read-only pages (open to readers) reached from the Správa landing page; they set active_nav = "/sprava".
+OVERVIEW_PAGES = [
+    ("Místa", "/mista", "měřicí místa v pořadí obchůzky, elektroměry, spotřeba a stav odečtů"),
+    ("Nájemci", "/najemci", "spotřeba nájemců po měsících a jejich měřicí místa"),
+    ("Fotky", "/fotky", "nahrané fotky elektroměrů a jejich rozpoznání"),
 ]
 ROLE_LABELS = {"main": "hlavní", "sub": "podružný", "control": "kontrolní"}
 USER_ROLE_LABELS = {"admin": "administrátor", "reader": "čtenář"}
@@ -162,26 +175,28 @@ def _get(db: Session, model: Any, obj_id: int) -> Any:
 # --- overview -------------------------------------------------------------------------
 
 
-@router.get("", name="sprava")
-def sprava(request: Request, db: DbSession, user: AdminUser):
+@overview_router.get("", name="sprava")
+def sprava(request: Request, db: DbSession, user: CurrentUser):
     counts = {
         "tenants": db.scalar(select(func.count(Tenant.id))),
         "points": db.scalar(select(func.count(MeterPoint.id))),
-        "meters": db.scalar(select(func.count(Meter.id))),
-        "allocations": db.scalar(select(func.count(Allocation.id))),
-        "users": db.scalar(select(func.count(User.id))),
+        "photos": db.scalar(select(func.count(Photo.id))),
     }
-    recent = list(db.scalars(select(AuditLog).order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(10)))
-    return _render(
-        request,
-        "sprava/index.html",
-        "/sprava",
-        page_title="Správa",
-        counts=counts,
-        recent=recent,
-        fmt_changes=_fmt_changes,
-        ENTITY_LABELS=ENTITY_LABELS,
-    )
+    ctx: dict[str, Any] = {"overview_pages": OVERVIEW_PAGES}
+    if user.is_admin:
+        counts |= {
+            "meters": db.scalar(select(func.count(Meter.id))),
+            "allocations": db.scalar(select(func.count(Allocation.id))),
+            "users": db.scalar(select(func.count(User.id))),
+        }
+        ctx |= {
+            "recent": list(db.scalars(select(AuditLog).order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(10))),
+            "fmt_changes": _fmt_changes,
+            "ENTITY_LABELS": ENTITY_LABELS,
+        }
+    else:
+        ctx["sections"] = []  # readers: no administration sections
+    return _render(request, "sprava/index.html", "/sprava", page_title="Správa", counts=counts, **ctx)
 
 
 # --- tenants ----------------------------------------------------------------------------
@@ -569,13 +584,13 @@ async def meter_replace(request: Request, point_id: int, db: DbSession, user: Ad
         if old is None or old.meter_point_id != p.id:
             raise FormError("Vyberte vyměňovaný elektroměr tohoto místa.")
         if old.removed_on is not None:
-            raise FormError(f"Elektroměr {old.serial} už je odebrán ({old.removed_on:%d.%m.%Y}).")
+            raise FormError(f"Elektroměr {old.serial} už je odebrán ({format_date(old.removed_on)}).")
         when = _date(form, "date", label="Datum výměny")
         if when is None:
             raise FormError("Vyplňte datum výměny.")
         last_old = db.scalar(select(func.max(Reading.taken_at)).where(Reading.meter_id == old.id))
         if last_old is not None and last_old.date() > when:
-            raise FormError(f"Starý elektroměr má odečet po datu výměny ({last_old:%d.%m.%Y}).")
+            raise FormError(f"Starý elektroměr má odečet po datu výměny ({format_date(last_old)}).")
         values = _check_registers(_meter_values(form, prefix="new_"))
         values["installed_on"] = when
         values["removed_on"] = None
@@ -608,7 +623,7 @@ async def meter_replace(request: Request, point_id: int, db: DbSession, user: Ad
                 if exists is not None:
                     if exists.value != v:
                         raise FormError(
-                            f"{meter_obj.serial} {reg} už má k {when:%d.%m.%Y} jiný odečet "
+                            f"{meter_obj.serial} {reg} už má k {format_date(when)} jiný odečet "
                             f"({format_reading(exists.value)})."
                         )
                     continue
@@ -629,7 +644,7 @@ async def meter_replace(request: Request, point_id: int, db: DbSession, user: Ad
         db.rollback()
         flash(request, _msg(e), "error")
         return _redirect(f"/sprava/mista/{point_id}")
-    flash(request, f"Výměna zaznamenána: {old.serial} → {new.serial} k {when:%d.%m.%Y}.", "success")
+    flash(request, f"Výměna zaznamenána: {old.serial} → {new.serial} k {format_date(when)}.", "success")
     return _redirect(f"/sprava/mista/{point_id}")
 
 

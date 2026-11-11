@@ -54,7 +54,7 @@ def test_misto_monthly_chart_matches_service(imported_reader_client, imported_db
         assert v["v"] == round(float(pt.value(p.id, "T1", i).value), 0)
     # after the last reading (2.8.2025) values are provisional and say so
     last = t1["values"][-1]
-    assert last["q"] == "provisional" and "2. 8. 2025" in last["t"].replace("\xa0", " ")
+    assert last["q"] == "provisional" and "2.8.2025" in last["t"]
 
 
 def test_misto_rollover_and_photos(imported_reader_client, imported_db: Session) -> None:

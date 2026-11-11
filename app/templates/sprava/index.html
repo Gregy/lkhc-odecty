@@ -1,15 +1,29 @@
 {% extends "sprava/_base.html" %}
 {% import "_macros.html" as ui with context %}
 {% block sprava %}
-<div class="tiles">
-  <a class="tile" href="/sprava/najemci"><div class="tile-label">Nájemci</div><div class="tile-value">{{ counts.tenants }}</div></a>
-  <a class="tile" href="/sprava/mista"><div class="tile-label">Měřicí místa / elektroměry</div><div class="tile-value">{{ counts.points }} / {{ counts.meters }}</div></a>
-  <a class="tile" href="/sprava/alokace"><div class="tile-label">Alokace</div><div class="tile-value">{{ counts.allocations }}</div></a>
-  <a class="tile" href="/sprava/uzivatele"><div class="tile-label">Uživatelé</div><div class="tile-value">{{ counts.users }}</div></a>
-</div>
+<section class="card">
+  <h2 class="card-title">Přehledy</h2>
+  <div class="tiles">
+    {% for label, url, desc in overview_pages %}
+    {% set n = {'/mista': counts.points, '/najemci': counts.tenants, '/fotky': counts.photos}[url] %}
+    <a class="tile" href="{{ url }}"><div class="tile-label">{{ label }}</div><div class="tile-value">{{ n }}</div><div class="tile-sub">{{ desc }}</div></a>
+    {% endfor %}
+  </div>
+</section>
+{% if current_user.is_admin %}
+<section class="card">
+  <h2 class="card-title">Administrace</h2>
+  <div class="tiles">
+    <a class="tile" href="/sprava/najemci"><div class="tile-label">Nájemci</div><div class="tile-value">{{ counts.tenants }}</div></a>
+    <a class="tile" href="/sprava/mista"><div class="tile-label">Měřicí místa / elektroměry</div><div class="tile-value">{{ counts.points }} / {{ counts.meters }}</div></a>
+    <a class="tile" href="/sprava/alokace"><div class="tile-label">Alokace</div><div class="tile-value">{{ counts.allocations }}</div></a>
+    <a class="tile" href="/sprava/uzivatele"><div class="tile-label">Uživatelé</div><div class="tile-value">{{ counts.users }}</div></a>
+  </div>
+</section>
 <section class="card">
   <h2 class="card-title">Poslední změny</h2>
   {% include "sprava/_audit_table.html" %}
   <p><a href="/sprava/audit">Celý auditní log</a></p>
 </section>
+{% endif %}
 {% endblock %}

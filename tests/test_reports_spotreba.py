@@ -28,11 +28,15 @@ def test_spotreba_aligned_default(imported_reader_client, imported_db: Session) 
     tenant_a = _tenant(net, syn.A)
     v = tab.period_sum(tenant_a.id, "T1")
     assert format_number(v.value) in html
-    # tenant B is provisional from August 2025 on (hangar meter unread) -> marked with "≈?"
+    # tenant B is provisional from August 2025 on (hangar meter unread) -> marked with "≈"
     tenant_b = _tenant(net, syn.B)
     assert tab.value(tenant_b.id, "T1", 11).quality.value == "provisional"
-    assert "≈?" in html and "q-provisional" in html
-    assert "q-legend" in html
+    assert f"≈{format_number(tab.value(tenant_b.id, 'T1', 11).value)}" in html and "q-provisional" in html
+    assert "≈?" not in html
+    # interpolated (estimated) values carry no mark, no italics class and no legend entry
+    assert v.quality.value == "estimated" and f"≈{format_number(v.value)}" not in html
+    assert "q-estimated" not in html and "odhad – interpolace" not in html
+    assert "q-legend" in html and "extrapolovaný odhad za posledním odečtem" in html
 
 
 def test_spotreba_year_capped_at_coverage(imported_reader_client) -> None:
@@ -74,7 +78,7 @@ def test_spotreba_xlsx_export(imported_reader_client, imported_db: Session) -> N
     ws = wb["Nájemci"]
     values = [[c.value for c in row] for row in ws.iter_rows()]
     flat = [v for row in values for v in row if v is not None]
-    assert "Kvalita hodnot:" in flat and "≈? předběžně" in flat  # legend
+    assert "Kvalita hodnot:" in flat and "předběžně" in flat and "odhad" not in flat  # legend: provisional only
     header_idx = next(i for i, row in enumerate(values) if row[0] == "Období")
     header = values[header_idx]
     assert f"{syn.A} T1" in header and "Kvalita (nejhorší v řádku)" in header
@@ -89,15 +93,19 @@ def test_spotreba_xlsx_export(imported_reader_client, imported_db: Session) -> N
     )
     dec = values[header_idx + 12]
     assert dec[0] == "prosinec 2025" and dec[header.index("Kvalita (nejhorší v řádku)")] == "předběžně"
-    # non-exact cells carry a comment with provenance
+    # provisional cells carry a fill and a comment with provenance; interpolated ones look like exact ones
     b_col = header.index(f"{syn.B} T1") + 1
     cell = ws.cell(row=header_idx + 13, column=b_col)
-    assert cell.comment is not None and "předběžné" in cell.comment.text
+    assert cell.comment is not None and "předběžné" in cell.comment.text and cell.fill.fgColor.rgb.endswith("FBE4E2")
+    assert tab.value(tenant_a.id, "T1", 0).quality.value == "estimated"
+    a_cell = ws.cell(row=header_idx + 2, column=header.index(f"{syn.A} T1") + 1)
+    assert a_cell.comment is None and a_cell.fill.fill_type is None and not a_cell.font.italic
+    assert jan[header.index("Kvalita (nejhorší v řádku)")] in (None, "")
     data = wb["Data"]
     rows = list(data.iter_rows(values_only=True))
     assert rows[0][:8] == ("Typ", "Nájemce / místo", "Tarif", "Období", "Od", "Do", "kWh", "Kvalita")
     qualities = {r[7] for r in rows[1:]}
-    assert {"přesně", "předběžně"} <= qualities
+    assert qualities - {None, ""} == {"předběžně"}  # only provisional values are labelled
 
 
 def test_spotreba_csv_export(imported_reader_client) -> None:

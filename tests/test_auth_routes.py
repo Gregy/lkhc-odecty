@@ -67,7 +67,7 @@ def test_google_login_flow(app: FastAPI) -> None:
         assert r.status_code == 303 and r.headers["location"] == "/mista"
         page = c.get("/mista")
         assert page.status_code == 200 and "pilot@example.org" in page.text
-        assert c.get("/sprava").status_code == 403  # new users are readers
+        assert c.get("/sprava/uzivatele").status_code == 403  # new users are readers
     with app.state.sessionmaker() as s:
         assert s.scalar(select(User).where(User.email == "pilot@example.org")).role == "reader"
 
@@ -97,10 +97,13 @@ def test_google_login_wrong_domain_rejected(app: FastAPI) -> None:
 
 def test_roles(admin_client: TestClient, reader_client: TestClient) -> None:
     assert admin_client.get("/sprava").status_code == 200
-    r = reader_client.get("/sprava", headers={"Accept": "text/html"})
+    r = reader_client.get("/sprava/uzivatele", headers={"Accept": "text/html"})
     assert r.status_code == 403 and "Přístup odepřen" in r.text
     assert "Správa" in admin_client.get("/").text
-    assert 'href="/sprava"' not in reader_client.get("/").text
+    # readers get the Správa landing page with just the read-only pages
+    assert 'href="/sprava"' in reader_client.get("/").text
+    page = reader_client.get("/sprava").text
+    assert 'href="/mista"' in page and 'href="/sprava/uzivatele"' not in page
 
 
 @pytest.mark.parametrize("path", STUB_ROUTES)

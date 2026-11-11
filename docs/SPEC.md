@@ -1,9 +1,10 @@
 # LKHC Odečty – specifikace (MVP)
 
-> Stav k 11. 11. 2026: dokument popisuje aplikaci tak, jak je (ne původní zadání). Hlavní změny proti
+> Stav k 11.11.2026: dokument popisuje aplikaci tak, jak je (ne původní zadání). Hlavní změny proti
 > původní verzi: obchůzka (Round) už není uložená entita – vše je odvozené z dat odečtů (§3, §5–§7);
 > Python 3.15; přísnější párování fotek v sérii (§5); potvrzené opravy zdrojových dat při importu (§3);
-> pravdivostní data pro vyhodnocení extrakce (§5).
+> pravdivostní data pro vyhodnocení extrakce (§5); v UI se značkou ≈ vyznačují jen předběžné
+> (extrapolované) hodnoty, zbytkový nájemce jen v součtu T1+T2 (§3); hlavní menu a data bez mezer (§6).
 
 Webová aplikace pro správu a prezentaci odečtů elektroměrů na letišti (aeroklub, přihlášení přes Google Workspace).
 Nahrazuje Google Sheet `Odečty elektřiny.xlsx` (soukromá data instalace v `private/`; zdroj importu a volitelné
@@ -49,6 +50,7 @@ Pojmy:
 - **Surová tabulka po dnech odečtů** (ekvivalent listu `Spotřeba`): řádky = dny, kdy byl odečten aspoň jeden elektroměr (u importu přesně řádky sheetu – ověřeno testem); období = dvojice po sobě jdoucích dnů; když měřák v daný den odečten nebyl, jeho spotřeba se celá připíše dni, kdy byl odečten příště (jako v sheetu). Pozdě nahlášený odečet nájemce tvoří vlastní (řídký) řádek – pohled ukazuje, co bylo kdy přečteno, neinterpretuje.
 - **Hodnota k datu** `value_at(meter, register, t)`: přesný odečet, jinak lineární interpolace mezi sousedními odečty (označeno `estimated`). Slouží pro vyúčtování k libovolným hranicím a pro live měřáky. Spotřeba MeterPointu za interval se sčítá přes všechny jeho Metery (výměny).
 - **Rozpočítání na nájemce** (ekvivalent `Rozpočítání se sazbou`): pro každé období a tarif `tenant = Σ factor × spotřeba(alokovaná místa)`, remainder tenant = `main − Σ ostatní`. Záporný zbytek je validní výsledek (v sheetu se děje, když se podružné měřáky odečtou v jiný den než hlavní), ale UI ho zvýrazní.
+- **Zbytkový nájemce jen v součtu T1+T2** (prezentace): jednotarifní podružné elektroměry se počítají celé do T1, takže T1 zbytku vychází příliš nízko (v zimě i záporně) a T2 příliš vysoko – smysl má jen součet. Výpočet po registrech i struktura snapshotu vyúčtování zůstávají; dashboard, nájemci, Spotřeba (zarovnaná období), vyúčtování (stránka, protokol, tisk) i exporty XLSX/CSV ukazují u zbytku jen T1+T2 (buňky T1/T2 „–“ / prázdné s vysvětlením, „Výpočet zbytku“ v součtech). Ostatní nájemci a všechny měřáky zůstávají po tarifech; surový pohled „po dnech odečtů“ (orákulum proti sheetu) také. Upozornění „záporný zbytek“ hodnotí součet T1+T2.
 - Bilance kontrolních měřáků: `control` místo vs. součet jeho potomků → zobrazit rozdíl.
 
 ### Zarovnaná období a díry v datech (HLAVNÍ režim výpočtu)
@@ -61,10 +63,10 @@ Odečty **nepřicházejí ve stejný čas**: k některým měřákům (typicky u
   - jinak **interpolace** mezi nejbližším odečtem před a po → `estimated`,
   - na otevřeném konci (po hranici ještě žádný odečet není) **extrapolace** z průměrného denního odběru posledního známého intervalu (prodlouženého zpět aspoň na 28 dní, aby velmi krátký poslední interval nezkreslil odhad) → `provisional`; elektroměr odebraný bez konečného odečtu se extrapoluje do data odebrání a dál je konstantní → `estimated` (pozdější odečet ho už nezpřesní), období celé po odebrání jsou přesně 0; s příchodem dalšího odečtu se sama přepočítá. Před prvním odečtem měřáku (nový měřák) je spotřeba 0 od `installed_on`, nikoli extrapolace dozadu.
 - Strategie interpolace je vyměnitelná (`Interpolator` protokol). MVP: lineární v čase. Připravit druhou strategii "podle profilu" (rozdělit spotřebu mezi dvěma odečty úměrně spotřebě referenčního měřáku ve stejném tarifu – typicky hlavního, který bude live); nemusí být zapnutá, ale rozhraní na ni musí stačit.
-- Každá vypočtená hodnota nese kvalitu: `exact` / `estimated` / `provisional` + metadata (z jakých odečtů a dat vznikla, kolik dní se interpolovalo). Agregace na nájemce nese nejhorší kvalitu svých složek a podíl odhadnutých kWh. UI kvalitu vždy ukazuje (např. kurzíva/≈ + tooltip "odhad z odečtů 2.11. a 4.1.").
+- Každá vypočtená hodnota nese kvalitu: `exact` / `estimated` / `provisional` + metadata (z jakých odečtů a dat vznikla, kolik dní se interpolovalo). Agregace na nájemce nese nejhorší kvalitu svých složek a podíl odhadnutých kWh. **Zobrazení** (jen prezentace, data i logika kvality beze změny): hodnoty interpolované mezi dvěma skutečnými odečty (`estimated`) jsou běžný případ a ukazují se stejně jako přesné (bez značky, podbarvení a legendy; původ zůstává jen v tooltipu po najetí myší); vyznačuje se pouze `provisional` – značka **≈**, kurzíva, tooltip/poklepání s původem a legenda „předběžně – extrapolovaný odhad za posledním odečtem“. V exportech je předběžná buňka podbarvená, má komentář s původem a sloupec „Kvalita“ uvádí „předběžně“ (u přesných a interpolovaných je prázdný). Součet nebo agregace je vyznačena, když je předběžná aspoň jedna složka (nejhorší kvalita). Pravidlo je v `app.formatting.quality_mark` / `is_marked`.
 - Součet spotřeb přes sousední období musí přesně sedět na rozdíl skutečných odečtů (interpolace jen rozděluje, nic nepřidává ani neztrácí) – testovat jako invariant.
 - Pozdě doručený odečet se zadá se **skutečným datem pořízení** (ne datem zadání); přepočet je automatický, protože se nic odvozeného neukládá (kromě snapshotu finalizovaného vyúčtování).
-- Vyúčtování nejde finalizovat, dokud některá složka na hranicích období je `provisional` (lze vynutit s vědomým potvrzením a poznámkou); `estimated` je povoleno, ale protokol to u měřáku uvede.
+- Vyúčtování nejde finalizovat, dokud některá složka na hranicích období je `provisional` (lze vynutit s vědomým potvrzením a poznámkou); `estimated` je povoleno a v UI se nevyznačuje (protokol u měřáku jen nenápadně uvede původ stavu na hranici, stejně jako u jiných stavů, které nejsou odečtem daného dne).
 - Upozornění "chybí odečet" se počítá per měřák (dní od posledního odečtu vs. obvyklý interval), nikoli podle obchůzek.
 
 ### Výchozí data z XLSX (list `Odečty`)
@@ -155,16 +157,18 @@ Důsledky pro model: `Meter` má `decimals_shown` (kolik desetinných míst ukaz
 
 ## 6. Přehledy
 
-- **Dashboard (`/`)**: kdy byl naposledy odečten hlavní elektroměr a nejnovější odečet vůbec (a kolik dní od nich); spotřeba za poslední období a od začátku roku po nájemcích (T1/T2/celkem); graf měsíční spotřeby po nájemcích (skládaný) s porovnáním s loňskem; bilance hlavní vs. podružné; upozornění (chybějící odečty, anomálie, záporný zbytek, fotky čekající na kontrolu).
+- **Dashboard (`/`)**: kdy byl naposledy odečten hlavní elektroměr a nejnovější odečet vůbec (a kolik dní od nich); spotřeba za poslední období a od začátku roku po nájemcích (T1/T2/celkem, zbytek jen celkem); graf měsíční spotřeby po nájemcích (skládaný) s porovnáním s loňskem; bilance hlavní vs. podružné; upozornění (chybějící odečty, anomálie, záporný zbytek, fotky čekající na kontrolu).
 - **Měřák / měřicí místo (`/mista/{id}`)**: historie odečtů, graf stavu a spotřeby, fotky, výměny elektroměrů.
 - **Nájemce (`/najemci/{id}`)**: spotřeba po obdobích a měřácích, graf.
 - **Spotřeba (`/spotreba`)**: zarovnaná období (měsíce nebo mezi odečty hlavního elektroměru) a sekundárně surová tabulka po dnech odečtů (ekvivalent listů `Spotřeba` a `Rozpočítání`), přepínač se sazbou / bez sazby, filtr roku, export XLSX/CSV.
 - Grafy podle skillu/dobrých zvyklostí: čitelné v obou režimech, konzistentní barvy nájemců napříč aplikací.
+- **Hlavní menu**: Přehled, Odečty, Spotřeba, Obchůzka, Dávka (jen admin), Kontrola, Vyúčtování, Správa (+ uživatel / odhlášení). Místa, Nájemci a Fotky nejsou samostatné záložky: odkazuje na ně stránka Správa (`/sprava`), která je přístupná i čtenářům (vidí jen tyto přehledy; sekce administrace zůstávají jen pro adminy) a na těchto stránkách je zvýrazněná záložka Správa.
+- **Data** všude v UI a exportech česky bez mezer: `3.7.2026`, `3.7.` (bez roku), `7.2026` (měsíc), `3.7.2026 14:05`; strojové formáty (CSV/JSON klíče, hodnoty `input type=date`, názvy souborů) zůstávají ISO. Centrálně `app.formatting.format_date` / `format_month` / `format_datetime` (filtry `|date_cs`, `|month_cs`, `|datetime_cs`), v JS `lkhc.fmtDate` / `fmtDateTime` / `fmtMonth`.
 
 ## 7. Vyúčtování (`/vyuctovani`)
 
-- Nové vyúčtování: rok → default přesné hranice 1.1.–1.1. v zarovnaných měsíčních obdobích (stavy na hranicích dopočtené, kvalita vyznačena); volitelně dvě vlastní data – pomocník nabídne dny odečtu hlavního elektroměru nejbližší 1. 1. (jako dřív v sheetu: např. 2.1.2025–4.1.2026); období uvnitř jsou vždy zarovnané kalendářní měsíce (první a poslední mohou být neúplné). Finalizované snapshoty starších vyúčtování „podle obchůzek“ se zobrazují beze změny.
-- Výstup: tabulka období × nájemce × T1/T2 + součty (jako `Final_YYYY`), a pro každého nájemce protokol: měřáky, počáteční a konečný stav, spotřeba, případné výměny/poznámky.
+- Nové vyúčtování: rok → default přesné hranice 1.1.–1.1. v zarovnaných měsíčních obdobích (stavy na hranicích dopočtené, předběžné vyznačeny); volitelně dvě vlastní data – pomocník nabídne dny odečtu hlavního elektroměru nejbližší 1.1. (jako dřív v sheetu: např. 2.1.2025–4.1.2026); období uvnitř jsou vždy zarovnané kalendářní měsíce (první a poslední mohou být neúplné). Finalizované snapshoty starších vyúčtování „podle obchůzek“ se zobrazují beze změny.
+- Výstup: tabulka období × nájemce × T1/T2 (zbytek jen T1+T2) + součty (jako `Final_YYYY`), a pro každého nájemce protokol: měřáky, počáteční a konečný stav, spotřeba, případné výměny/poznámky.
 - Export XLSX (souhrn + list pro každého nájemce), tisková HTML verze protokolu.
 - Finalizace uloží snapshot; finalizované lze znovu otevřít jen adminem (audit).
 

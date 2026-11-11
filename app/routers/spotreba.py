@@ -12,7 +12,7 @@ from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
 from app.deps import CurrentUser, DbSession, require_user
-from app.domain.aligned import QValue, qsum
+from app.domain.aligned import QValue, qsum, worst
 from app.domain.consumption import sum_optional
 from app.routers._reports_common import download
 from app.services import (
@@ -27,6 +27,7 @@ from app.services.consumption import REGISTERS
 from app.services.exports import (
     BOLD,
     CSV_MIME,
+    MUTED,
     NUM_FMT,
     TITLE,
     XLSX_MIME,
@@ -40,8 +41,8 @@ from app.services.exports import (
     write_q,
 )
 from app.services.network import Network
-from app.services.reports import QUALITY_SHORT, data_coverage, data_years, qdict, year_range
-from app.templating import templates
+from app.services.reports import data_coverage, data_years, qdict, quality_label, year_range
+from app.templating import REMAINDER_TARIFF_NOTE, format_date, is_marked, templates
 
 router = APIRouter(prefix="/spotreba", dependencies=[Depends(require_user)])
 
@@ -54,6 +55,7 @@ class Col:
     tenant_id: int | None = None
     point_id: int | None = None
     is_main: bool = False
+    title: str = ""  # header tooltip
 
 
 @dataclass
@@ -123,7 +125,9 @@ def _params(request: Request, default_year: int | None) -> Params:
     return Params(view, q.get("sazba", "1") != "0", year, gran, q.get("predbezne") == "1")
 
 
-def _value_cols(net: Network, split: bool, *, points: bool) -> list[Col]:
+def _value_cols(net: Network, split: bool, *, points: bool, remainder_total: bool = False) -> list[Col]:
+    """Value columns. ``remainder_total`` (aligned view): the remainder tenant gets only a T1+T2 column even
+    when split by tariff (see REMAINDER_TARIFF_NOTE); the raw "like the sheet" view keeps T1/T2 for it."""
     regs = list(REGISTERS) if split else ["total"]
     cols: list[Col] = []
     if points:
@@ -138,6 +142,9 @@ def _value_cols(net: Network, split: bool, *, points: bool) -> list[Col]:
         # a tenant without any T2 meter gets no (always zero) T2 column
         pids = net.main_point_ids if t.is_remainder else {r.meter_point_id for r in net.rules if r.tenant_id == t.id}
         has = {reg for pid in pids for reg in net.point_registers(pid)}
+        if split and remainder_total and t.is_remainder:
+            cols.append(Col("T1+T2", t.name, "total", tenant_id=t.id, title=REMAINDER_TARIFF_NOTE))
+            continue
         for reg in regs:
             if split and reg != "T1" and reg not in has:
                 continue
@@ -175,16 +182,16 @@ def _aligned_tables(db: Session, net: Network, p: Params, today: date) -> tuple[
             spans_kw = {"granularity": "month", "start": rng[0], "end": rng[1]}
             if not p.provisional and p.year and cov.end and cov.end < date(p.year + 1, 1, 1):
                 note = (
-                    f"Měsíce po {cov.end.day}. {cov.end.month}. {cov.end.year} nejsou zobrazeny – hlavní elektroměr "
+                    f"Měsíce po {format_date(cov.end)} nejsou zobrazeny – hlavní elektroměr "
                     "pro ně ještě nemá odečty (byly by jen předběžné)."
                 )
     if spans_kw.get("boundaries") == [] or not resolve_spans(db, **spans_kw):
-        empty_t = ConsTable("aligned", "Nájemci", _value_cols(net, p.split, points=False), [])
+        empty_t = ConsTable("aligned", "Nájemci", _value_cols(net, p.split, points=False, remainder_total=True), [])
         empty_p = ConsTable("aligned", "Měřicí místa", _value_cols(net, p.split, points=True), [])
         return empty_t, empty_p, note or "Pro zvolené období nejsou data."
     tt = tenant_consumption_table(db, net=net, **spans_kw)
     pt = tt.points
-    tcols = _value_cols(net, p.split, points=False)
+    tcols = _value_cols(net, p.split, points=False, remainder_total=True)
     pcols = _value_cols(net, p.split, points=True)
 
     def tcell(c: Col, i: int) -> QValue:
@@ -301,6 +308,10 @@ def _write_wide(ws, tab: ConsTable, p: Params, title: str) -> None:
     ws.cell(row=1, column=1, value=title).font = TITLE
     ws.cell(row=2, column=1, value=_describe(p))
     row = write_legend(ws, 4, raw=tab.kind == "raw")
+    if any(c.title for c in tab.cols):  # the remainder tenant is exported only as T1+T2
+        note = "Zbytek je uveden jen v součtu T1+T2: " + REMAINDER_TARIFF_NOTE
+        ws.cell(row=row - 1, column=1, value=note).font = MUTED
+        row += 1
     write_header(ws, row, ["Období", "Od", "Do"] + [f"{c.group} {c.label}".strip() for c in tab.cols])
     if tab.kind == "aligned":
         ws.cell(row=row, column=4 + len(tab.cols), value="Kvalita (nejhorší v řádku)").font = BOLD
@@ -316,8 +327,7 @@ def _write_wide(ws, tab: ConsTable, p: Params, title: str) -> None:
             else:
                 ws.cell(row=row, column=4 + j, value=to_num(v)).number_format = NUM_FMT
         if tab.kind == "aligned":
-            worst = max((c.quality.rank for c in r.cells), default=0)
-            ws.cell(row=row, column=4 + len(tab.cols), value=list(QUALITY_SHORT.values())[worst])
+            ws.cell(row=row, column=4 + len(tab.cols), value=quality_label(worst(c.quality for c in r.cells)))
     if tab.rows:
         row += 1
         ws.cell(row=row, column=1, value="Součet").font = BOLD
@@ -345,9 +355,9 @@ def _long_rows(tab: ConsTable, kind_label: str) -> list[list[Any]]:
                         r.start,
                         r.end,
                         v.value,
-                        QUALITY_SHORT[v.quality.value],
-                        v.estimated_kwh,
-                        plain(qdict(v)["title"]).replace("\n", "; ") if v.quality.value != "exact" else "",
+                        quality_label(v.quality),
+                        v.estimated_kwh if is_marked(v.quality) else None,
+                        plain(qdict(v)["title"]).replace("\n", "; ") if is_marked(v.quality) else "",
                     ]
                 )
             else:
