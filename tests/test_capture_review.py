@@ -248,15 +248,15 @@ def test_decimal_slip_and_echo_need_acknowledgement(fapp: FastAPI, admin: TestCl
     codes = {i.code for i in card.rows[0].issues["T1"]}
     assert {"decimal_slip", "high"} <= codes
     admin.post("/odecty/kontrola/zahodit", data={"photo_ids": ",".join(map(str, card.photo_ids))})
-    # model returns exactly the expected value from the prompt -> flagged as possible echo
+    # model returns exactly the last reading as shown in the prompt (1 kWh low) -> possible echo
     with fapp.state.sessionmaker() as db:
         from app.extraction.hints import meter_hint_list
 
-        exp = next(h for h in meter_hint_list(db, T0) if h.serial == SER).reg("T1").expected
+        exp = next(h for h in meter_hint_list(db, T0) if h.serial == SER).reg("T1").last_value - 1
     shoot(fapp, admin, answer({"serial": SER, "registers": [{"digits_seen": str(exp)}]}), at=T0)
     q.process_pending(fapp)
     (card,) = cards(fapp)
-    assert [i.code for i in card.rows[0].issues["T1"]] == ["same_as_hint"] and not card.clean
+    assert "same_as_hint" in [i.code for i in card.rows[0].issues["T1"]] and not card.clean
     row = card.rows[0]
     assert post_card(admin, card, {row.key: {"meter": row.meter.meter_id, "T1": str(exp)}}).status_code == 422
     # typing a different value removes the extraction flag

@@ -139,6 +139,7 @@ Důsledky pro model: `Meter` má `decimals_shown` (kolik desetinných míst ukaz
 
 ### Extrakce z fotek (`app/extraction/`)
 - Rozhraní `ReadingExtractor.extract(image_bytes, hints) -> ExtractionResult` (`meters: [{serial | null, serial_confidence, registers: [{register | null, value, confidence, label_seen}]}]`, `readable: bool`, `problems`, `raw`, `model`). `hints` = seznam známých elektroměrů (výr. číslo, typ, registry, počet míst a desetin, `display_note`, poslední stav a očekávaný rozsah) – pomáhá modelu i párování.
+- Nápověda modelu uvádí poslední stav a dolní mez rozsahu záměrně o 1 kWh nižší než skutečnost. Hodnota shodná se skutečným posledním odečtem je tedy přečtená z displeje (elektroměr stojí); hodnota shodná s číslem z nápovědy je opsaná a dostane příznak `same_as_hint`.
 - Před odesláním modelu: EXIF otočení, zmenšení (delší strana ~1600–2000 px); originál se uchovává.
 - **Série**: snímky pořízené do ~60 s po sobě tvoří skupinu jen **pro zobrazení** ve frontě kontroly. Registry dvou snímků se sloučí do jednoho návrhu jen tehdy, když jsou oba nezávisle přiřazené ke stejnému elektroměru (výr. číslo na každém, nebo silná identifikace jednoho a hodnota druhého, která sedí jen do očekávaného rozsahu tohoto elektroměru a žádného jiného). Při rozporu hodnot → ke kontrole, nehlasovat potichu.
 - Implementace:

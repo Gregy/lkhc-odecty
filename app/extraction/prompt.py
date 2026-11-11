@@ -80,6 +80,26 @@ def _fmt(v: Decimal | None) -> str:
     return s
 
 
+HINT_OFFSET = Decimal(1)  # kWh subtracted from the last reading before it is shown to the model
+
+
+def shown_hint_values(r: Any) -> tuple[Decimal | None, Decimal | None]:
+    """(last reading, lower bound) as written into the prompt: both 1 kWh below the real numbers.
+
+    The model never sees the real last reading, so a value equal to it was read from the display (an idle
+    meter), while a value equal to a number in the prompt is an echo of the hint.
+    """
+
+    def down(v: Decimal | None) -> Decimal | None:
+        return None if v is None else max(v - HINT_OFFSET, Decimal(0))
+
+    last = down(r.last_value)
+    low = down(r.low) if r.low is not None and r.high is not None else None
+    if low is not None and last is not None:
+        low = min(low, last)
+    return last, low
+
+
 def describe_meter(m: MeterHintIn, include_values: bool) -> str:
     regs = "/".join(m.registers)
     dec = (
@@ -94,11 +114,12 @@ def describe_meter(m: MeterHintIn, include_values: bool) -> str:
         for r in m.register_hints:
             if r.last_value is None:
                 continue
-            txt = f"  {r.register}: last reading {_fmt(r.last_value)} kWh"
+            last, low = shown_hint_values(r)
+            txt = f"  {r.register}: last reading was at least {_fmt(last)} kWh"
             if r.last_date:
                 txt += f" on {r.last_date.isoformat()}"
-            if r.low is not None and r.high is not None:
-                txt += f"; plausible now roughly {_fmt(r.low)}-{_fmt(r.high)}"
+            if low is not None and r.high is not None:
+                txt += f"; plausible now roughly {_fmt(low)}-{_fmt(r.high)}"
             parts.append(txt + ".")
     return "\n".join(parts)
 
@@ -363,28 +384,23 @@ ECHO_WHOLE_MIN_RANGE = 20  # kWh width of the plausible range
 
 
 def flag_hint_echo(rv: RegisterValue, hint: MeterHintIn | None, register: str | None) -> None:
-    """Mark a value equal to a value given in the prompt (possible echo of the hint).
+    """Mark a value equal to a number the prompt showed for this register (possible echo of the hint).
 
-    Numbers shown in the prompt (last reading, upper bound of the range) are compared on whole kWh when
-    the meter clearly consumes (>= 5 kWh expected since the last reading, range >= 20 kWh): the hints are
-    whole kWh from the sheet and a model echoing one tends to add a decimal digit (measured on a real
-    photo: the prompt gave last reading N, the drum showed a much higher value, the model "read" N.9).
-    A nearly idle meter legitimately shows the same whole kWh again: exact comparison only.
+    The prompt shows the last reading and the lower bound 1 kWh below the real values (``shown_hint_values``)
+    and the upper bound of the plausible range. A value equal to the real last reading is therefore a real
+    read of an idle meter and is not flagged. The shown numbers are compared exactly, and on whole kWh when
+    the meter clearly consumes (>= 5 kWh expected since the last reading, range >= 20 kWh): a model echoing
+    a whole-kWh hint tends to add a decimal digit.
     """
     if hint is None or rv.value is None or register is None:
         return
     h = hint.reg(register)
     if h is None:
         return
-    echo = set()
-    idle = h.last_value is not None and h.expected is not None and h.expected == h.last_value
-    if not idle:  # a meter without consumption legitimately shows its last value again
-        if h.last_value is not None and h.expected is not None:
-            echo.add(h.last_value)  # consumption expected but the value did not move
-        if h.expected is not None:
-            echo.add(h.expected)
+    last, low = shown_hint_values(h)
+    shown = {v for v in (last, low) if v is not None}
     if h.low is not None and h.high is not None and h.high != h.low:
-        echo.add(h.high)
+        shown.add(h.high)
     moving = (
         h.last_value is not None
         and h.expected is not None
@@ -393,10 +409,7 @@ def flag_hint_echo(rv: RegisterValue, hint: MeterHintIn | None, register: str | 
         and h.high is not None
         and h.high - h.low >= ECHO_WHOLE_MIN_RANGE
     )
-    # whole-kWh comparison only for numbers the prompt shows (last reading, range); the expected value is not
-    # in the prompt and a steady meter really lands on it (measured: three walks in a row within 1 kWh)
-    shown = {e for e in echo if e in (h.last_value, h.high)}
-    hit = rv.value in echo or (moving and any(int(e) == int(rv.value) for e in shown))
+    hit = rv.value in shown or (moving and any(int(e) == int(rv.value) for e in shown))
     if hit and "same_as_hint" not in rv.problems:
         rv.problems.append("same_as_hint")
 

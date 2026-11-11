@@ -36,7 +36,8 @@ HINT = MeterHintIn(
 def test_prompt_contains_hints_and_rules() -> None:
     p = build_prompt(ExtractionHints(meters=(HINT,)))
     assert "69253071" in p and "Nájemce A z chodby" in p and "displej otočený" in p
-    assert "last reading 512 kWh on 2026-10-01" in p
+    assert "last reading was at least 511 kWh on 2026-10-01" in p and "roughly 511-547" in p
+    assert "512" not in p  # the real last reading is never shown: a read equal to it cannot be an echo
     assert "digits_seen" in p and "NEVER guess" in p and "handwritten" in p.lower()
     no_values = build_prompt(ExtractionHints(meters=(HINT,), include_values=False))
     assert "last reading" not in no_values and "69253071" in no_values
@@ -158,13 +159,14 @@ def test_interpret_value_flags_disagreement() -> None:
 
 
 def test_echo_of_hint_is_flagged() -> None:
-    for v in ("512", "517", "547"):  # last (while consumption expected), expected, high
+    for v in ("511", "547"):  # numbers the prompt shows: last reading - 1 kWh, upper bound
         rv = RegisterValue("T1", D(v), 0.9)
         flag_hint_echo(rv, HINT, "T1")
         assert "same_as_hint" in rv.problems, v
-    rv = RegisterValue("T1", D("518.37"), 0.9)
-    flag_hint_echo(rv, HINT, "T1")
-    assert rv.problems == []
+    for v in ("512", "517", "518.37"):  # real last reading (idle meter), expected value, any other read
+        rv = RegisterValue("T1", D(v), 0.9)
+        flag_hint_echo(rv, HINT, "T1")
+        assert rv.problems == [], v
 
 
 def test_result_roundtrip() -> None:
@@ -205,7 +207,7 @@ def test_echo_with_an_added_decimal_is_flagged() -> None:
         decimals_shown=1,
         register_hints=(RegisterHint("T1", D("4321"), date(2026, 2, 2), D("4321"), D("4622"), D("5223")),),
     )
-    echoed = RegisterValue("T1", D("4321.9"), 0.9, digits_seen="4321.9")
+    echoed = RegisterValue("T1", D("4320.9"), 0.9, digits_seen="4320.9")  # prompt showed 4320
     flag_hint_echo(echoed, h, "T1")
     assert echoed.problems == ["same_as_hint"]
     read = RegisterValue("T1", D("4916.4"), 0.9, digits_seen="4916.4")
@@ -218,9 +220,13 @@ def test_echo_with_an_added_decimal_is_flagged() -> None:
         decimals_shown=1,
         register_hints=(RegisterHint("T1", D("5555"), date(2026, 7, 3), D("5555"), D("5556"), D("5576")),),
     )
-    same_kwh = RegisterValue("T1", D("5555.9"), 0.9, digits_seen="5555.9")
-    flag_hint_echo(same_kwh, slow, "T1")
-    assert same_kwh.problems == []
+    for v in ("5555.9", "5555", "5554.9"):
+        same_kwh = RegisterValue("T1", D(v), 0.9, digits_seen=v)
+        flag_hint_echo(same_kwh, slow, "T1")
+        assert same_kwh.problems == [], v
+    copied = RegisterValue("T1", D("5554"), 0.9, digits_seen="5554")  # exactly the number in the prompt
+    flag_hint_echo(copied, slow, "T1")
+    assert copied.problems == ["same_as_hint"]
 
 
 def test_point_slip_on_a_drum_uses_the_meter_layout() -> None:
@@ -247,6 +253,6 @@ def test_steady_meter_landing_on_the_unshown_expected_value_is_not_flagged() -> 
     read = RegisterValue("T1", D("6777.57"), 0.95, digits_seen="0677757")
     flag_hint_echo(read, h, "T1")
     assert read.problems == []
-    copied = RegisterValue("T1", D("6777"), 0.95, digits_seen="06777")  # exact copy still flagged
-    flag_hint_echo(copied, h, "T1")
-    assert copied.problems == ["same_as_hint"]
+    exact = RegisterValue("T1", D("6777"), 0.95, digits_seen="06777")  # never shown, so not an echo either
+    flag_hint_echo(exact, h, "T1")
+    assert exact.problems == []
