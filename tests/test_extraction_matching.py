@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.extraction.hints import build_hints, meter_hint_list
 from app.extraction.matching import apply_matching, levenshtein, match_readout, normalize_serial
-from app.extraction.series import group_by_gap
 from app.extraction.types import ExtractionResult, MeterHintIn, MeterReadout, RegisterHint, RegisterValue
 
 
@@ -87,15 +86,6 @@ def test_two_meters_in_one_photo() -> None:
     res = ExtractionResult(meters=[ro("69253071", "3050"), ro("38170625", "3")], readable=True)
     apply_matching(res, HINTS, AT)
     assert [m.meter_id for m in res.meters] == [1, 2]
-
-
-def test_series_grouping_by_gap() -> None:
-    t = datetime(2026, 11, 8, 16, 54, 20)
-    from datetime import timedelta as td
-
-    times = [(1, t), (2, t + td(seconds=6)), (3, t + td(seconds=10)), (4, t + td(seconds=95)), (5, t + td(seconds=150))]
-    assert group_by_gap(times) == [[1, 2, 3], [4, 5]]
-    assert group_by_gap([(9, t)]) == [[9]]
 
 
 def test_hints_from_db(imported_db: Session) -> None:

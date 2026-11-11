@@ -1,5 +1,6 @@
-{#- One review card (photo series). Context: card, meters, points, problem_label, photo_problems, today,
-    optional posted/form_day/form_reported_by when re-rendering a submitted form. -#}
+{#- One review card (photos of the same recognised meter(s) on one day, or a single photo). Context: card,
+    meters, points, problem_label, photo_problems, today, optional posted/form_day/form_reported_by when
+    re-rendering a submitted form. -#}
 {% import "_macros.html" as ui with context %}
 {% set is_admin = current_user and current_user.is_admin %}
 {% set day_value = form_day if posted else (card.day.isoformat() if card.day else '') %}
@@ -8,9 +9,8 @@
   {% if card.extraction_pending %}hx-get="/odecty/kontrola/karta/{{ card.key }}" hx-trigger="every 5s" hx-swap="outerHTML"{% endif %}>
   <header class="rc-head">
     <div class="rc-title">
-      {% if card.taken_at %}<strong>{{ card.taken_at|datetime_cs }}</strong>{% else %}<span class="badge badge-warning">bez data pořízení</span>{% endif %}
+      {% if card.taken_at %}<strong>{{ card.taken_at|datetime_cs }}</strong>{% if card.last_taken_at and card.last_taken_at.strftime('%H:%M') != card.taken_at.strftime('%H:%M') %}<strong>–{{ card.last_taken_at.strftime('%H:%M') }}</strong>{% endif %}{% else %}<span class="badge badge-warning">bez data pořízení</span>{% endif %}
       <span class="muted">· {{ card.photos|length }} {{ 'fotka' if card.photos|length == 1 else ('fotky' if card.photos|length < 5 else 'fotek') }}</span>
-      {% if card.photos|length > 1 %}<span class="badge" title="Fotky pořízené do 60 s po sobě">série</span>{% endif %}
       {% for s in card.photos|map(attribute='source')|unique %}{{ ui.badge({'walk': 'obchůzka', 'upload': 'dávka', 'share': 'sdíleno'}.get(s, s), 'muted') }}{% endfor %}
       {% if card.reported_by %}{{ ui.badge('nahlásil: ' ~ card.reported_by, 'info') }}{% endif %}
     </div>

@@ -1,23 +1,23 @@
 """Review queue (``/odecty/kontrola``): cards of photos with proposed readings, confirmation.
 
-A *card* is one photo series (or a single photo) – photos taken seconds apart are grouped for
-*display* only: one switchboard often holds several meters, so neighbouring photos are frequently
-of different meters. Each readout is matched to a meter on its own evidence (serial read on that
-photo, the walk point it was taken at, a manual choice, or a value that fits exactly one active
-meter); readouts tied to the same meter are merged into one *row*. A readout without its own
-identification never inherits a neighbour's meter: it becomes an unassigned row with ranked
-suggestions, and choosing one is a human action. Disagreeing values for one meter are a conflict
-(the field stays empty and the user picks a value), never a silent vote. Nothing is written as
-``confirmed`` except by ``confirm_card`` / ``bulk_confirm``, which are only called from
-explicit user actions; every plausibility issue and doubtful extraction flag must be
-acknowledged by code.
+Cards are formed *after* extraction, from what each photo shows (``group_photos``), never from time
+proximity: one switchboard often holds several meters and the walker photographs them seconds apart.
+Each readout is matched to a meter on its own evidence (serial read on that photo, the walk point it
+was taken at, a manual choice, or a value that fits exactly one active meter); a card is the set of
+photos of the same meter(s) on the same day, and readouts tied to the same meter are merged into one
+*row*. A readout without its own identification never inherits a neighbour's meter: it becomes an
+unassigned row with ranked suggestions (meters identified in photos taken shortly before / after), and
+choosing one is a human action. Disagreeing values for one meter are a conflict (the field stays empty
+and the user picks a value), never a silent vote. Nothing is written as ``confirmed`` except by
+``confirm_card`` / ``bulk_confirm``, which are only called from explicit user actions; every
+plausibility issue and doubtful extraction flag must be acknowledged by code.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Hashable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -49,8 +49,10 @@ DOUBT_MESSAGES = {
     "value_mismatch": "Číslice a hodnota od modelu nesouhlasí.",
     "register_unknown": "Model uvedl registr, který elektroměr nemá.",
 }
-# Identification that ties a readout to a meter by itself (merging rows, bulk confirmation).
+# Identification that ties a readout to a meter by itself (merging cards and rows, bulk confirmation).
 STRONG_METHODS = ("exact", "manual", "walk")
+# Suggestions only (never grouping or values): meters identified in photos taken this close in time.
+NEIGHBOUR_WINDOW = timedelta(minutes=2)
 METHOD_LABELS = {
     "exact": "výr. číslo",
     "fuzzy": "podobné výr. číslo",
@@ -136,6 +138,10 @@ class Card:
         return self.taken_at.date() if self.taken_at else None
 
     @property
+    def last_taken_at(self) -> datetime | None:
+        return max((p.taken_at for p in self.photos if p.taken_at), default=None)
+
+    @property
     def extraction_pending(self) -> bool:
         return any(p.extraction_status == "queued" for p in self.photos)
 
@@ -177,10 +183,6 @@ class Card:
     @property
     def clean(self) -> bool:
         return not self.blockers()
-
-
-def card_key(photo: Photo) -> str:
-    return photo.series_id or f"p{photo.id}"
 
 
 def _fmt_value(v: Decimal) -> str:
@@ -265,27 +267,27 @@ def _photo_readouts(hc: HintCache, photo: Photo, hints: list[MeterHintIn], at: d
     return readouts
 
 
-def _suggest_unidentified(pairs: list[tuple[Photo, MeterReadout]], hints: list[MeterHintIn]) -> None:
-    """Readouts without their own identification get *ranked suggestions* (never an assignment).
+def _suggest_unidentified(readout: MeterReadout, near: Sequence[int], hints: list[MeterHintIn]) -> None:
+    """A readout without its own identification gets *ranked suggestions* (never an assignment).
 
-    Order: meters identified elsewhere in the same group whose plausible range the value fits (closest
-    first), the other meters of the group, then other active meters the value fits."""
+    ``near`` = meters identified in photos taken shortly before / after (closest in time first). Order:
+    nearby meters whose plausible range the value fits (closest value first), other meters the value fits,
+    the other nearby meters, then the remaining candidates of the matching."""
+    if readout.meter_id is not None or readout.match_method == "unknown_serial":
+        return
     by_id = {h.meter_id: h for h in hints}
-    group = list(dict.fromkeys(r.meter_id for _, r in pairs if r.meter_id is not None))
-    for _, r in pairs:
-        if r.meter_id is not None or r.match_method == "unknown_serial":
-            continue
-        fits: list[tuple[Decimal, int]] = []
-        for mid in dict.fromkeys([*group, *r.match_candidates]):
-            h = by_id.get(mid)
-            if h is None:
-                continue
-            dists = [d for rv in r.registers if (d := value_fits(rv, h, rv.register)) is not None]
-            if dists:
-                fits.append((min(dists), mid))
-        ranked = [m for _, m in sorted(fits)]
-        rest = [m for m in [*r.match_candidates, *group] if m not in ranked]
-        r.match_candidates = list(dict.fromkeys([*ranked, *rest]))
+
+    def fit(mid: int) -> Decimal | None:
+        h = by_id.get(mid)
+        if h is None:
+            return None
+        dists = [d for rv in readout.registers if (d := value_fits(rv, h, rv.register)) is not None]
+        return min(dists) if dists else None
+
+    near_fit = sorted((d, i, mid) for i, mid in enumerate(near) if (d := fit(mid)) is not None)
+    other_fit = sorted((d, mid) for mid in readout.match_candidates if mid not in near and (d := fit(mid)) is not None)
+    ranked = [m for *_, m in near_fit] + [m for _, m in other_fit]
+    readout.match_candidates = list(dict.fromkeys([*ranked, *near, *readout.match_candidates]))
 
 
 def _rows_for(hc: HintCache, db: Session, pairs: list[tuple[Photo, MeterReadout]], at: datetime | None) -> list[Row]:
@@ -390,37 +392,188 @@ def evaluate_row(db: Session, row: Row, day: date | None) -> None:
         row.issues[reg] = issues
 
 
-def build_cards(db: Session, *, keys: Iterable[str] | None = None, limit: int | None = None) -> list[Card]:
-    """Cards for unreviewed photos, oldest first (photos without a date last)."""
-    photos = list(
+class _UnionFind:
+    def __init__(self) -> None:
+        self.parent: dict[Hashable, Hashable] = {}
+
+    def find(self, x: Hashable) -> Hashable:
+        self.parent.setdefault(x, x)
+        while self.parent[x] != x:
+            self.parent[x] = self.parent[self.parent[x]]
+            x = self.parent[x]
+        return x
+
+    def union(self, keep: Hashable, other: Hashable) -> None:
+        """Merge ``other``'s set into ``keep``'s (``keep``'s root stays the root)."""
+        a, b = self.find(keep), self.find(other)
+        if a != b:
+            self.parent[b] = a
+
+
+def _linkable(photo: Photo) -> bool:
+    """Photos that can share a card: dated and with the extraction finished (pending = own card)."""
+    return photo.taken_at is not None and photo.extraction_status != "queued"
+
+
+def group_photos(
+    photos: Sequence[Photo], readouts: Mapping[int, Sequence[MeterReadout]]
+) -> list[tuple[str, list[Photo]]]:
+    """Split review photos into cards by what each photo shows (never by time proximity).
+
+    Nodes are photos and (meter, day) pairs; a card is a connected component of photos:
+
+    1. A *strongly* identified readout (``STRONG_METHODS``: serial, walk point, manual) links its photo
+       to (meter, photo's day). A photo of several meters thus joins their cards into one.
+    2. A photo with no strong readout but with weakly matched meters (``values`` / ``fuzzy``) joins the
+       card of those meters only when that is unambiguous: all its weak meters that belong to a card
+       built in step 1 belong to the same one. When none does, a photo with a single weak meter joins
+       the other such photos of that meter and day. Weak links never merge two cards (decided against the
+       step-1 components, so the result does not depend on the order of photos).
+    3. Anything else - undated photo, extraction still running, nothing identified (unreadable, unknown
+       serial, ambiguous values, walk point mismatch), weak photo with an ambiguous target - is its own card.
+
+    Returns ``(key, photos)`` in the order of each card's first photo (``photos`` keep the input order).
+    Key: ``m<lowest meter id>_<YYYYMMDD>`` for cards with an identified meter (stable while photos of the
+    same meter are added), ``p<photo id>`` for a single-photo card without one.
+    """
+    uf = _UnionFind()
+    linkable = [p for p in photos if _linkable(p)]
+
+    def pnode(p: Photo) -> tuple:
+        return ("p", p.id)
+
+    def mnode(mid: int, p: Photo) -> tuple:
+        assert p.taken_at is not None
+        return ("m", mid, p.taken_at.date())
+
+    anchored: set[int] = set()
+    for p in linkable:
+        uf.find(pnode(p))
+        for r in readouts.get(p.id, ()):
+            if r.meter_id is not None and r.match_method in STRONG_METHODS:
+                uf.union(pnode(p), mnode(r.meter_id, p))
+                anchored.add(p.id)
+    strong_roots = {uf.find(pnode(p)) for p in linkable if p.id in anchored}
+    joins: list[tuple[tuple, Hashable]] = []
+    for p in linkable:
+        if p.id in anchored:
+            continue  # its weak readouts stay rows of its own card; they never link it further
+        weak = {mnode(r.meter_id, p) for r in readouts.get(p.id, ()) if r.meter_id is not None}
+        targets = {uf.find(m) for m in weak if m in uf.parent and uf.find(m) in strong_roots}
+        if len(targets) == 1:
+            joins.append((pnode(p), targets.pop()))
+        elif not targets and len(weak) == 1:
+            joins.append((pnode(p), weak.pop()))
+    for node, target in joins:
+        uf.union(target, node)
+
+    comps: dict[Hashable, list[Photo]] = {}
+    for p in photos:
+        comps.setdefault(uf.find(pnode(p)) if _linkable(p) else pnode(p), []).append(p)
+    meters_of: dict[Hashable, list[tuple]] = {}
+    for node in list(uf.parent):
+        if node[0] == "m":  # type: ignore[index]
+            meters_of.setdefault(uf.find(node), []).append(node)  # type: ignore[arg-type]
+    out: list[tuple[str, list[Photo]]] = []
+    for root, group in comps.items():
+        ms = meters_of.get(root)
+        if ms:
+            _, mid, day = min(ms)
+            out.append((f"m{mid}_{day:%Y%m%d}", group))
+        else:
+            out.append((f"p{group[0].id}", group))
+    return out
+
+
+def _queue_photos(db: Session) -> list[Photo]:
+    return list(
         db.scalars(
             select(Photo)
             .where(Photo.review_status == "new")
             .order_by(Photo.taken_at.is_(None), Photo.taken_at, Photo.uploaded_at, Photo.id)
         )
     )
-    groups: dict[str, list[Photo]] = {}
-    for p in photos:
-        groups.setdefault(card_key(p), []).append(p)
-    wanted = set(keys) if keys is not None else None
+
+
+def _all_readouts(hc: HintCache, photos: Sequence[Photo]) -> dict[int, list[MeterReadout]]:
+    return {p.id: _photo_readouts(hc, p, hc.at(p.taken_at), p.taken_at) for p in photos}
+
+
+def card_key_for_photo(db: Session, photo_id: int) -> str | None:
+    """Key of the review card that holds the photo (None when it is not in the queue)."""
+    photos = _queue_photos(db)
+    readouts = _all_readouts(HintCache(db), photos)
+    return next((key for key, group in group_photos(photos, readouts) if any(p.id == photo_id for p in group)), None)
+
+
+class _Neighbours:
+    """Meters identified in photos around a time: queue photos (their own readouts) and confirmed photos."""
+
+    def __init__(self, db: Session, photos: Sequence[Photo], readouts: Mapping[int, Sequence[MeterReadout]]) -> None:
+        self.items: list[tuple[datetime, int]] = [
+            (p.taken_at, r.meter_id)
+            for p in photos
+            if p.taken_at is not None
+            for r in readouts.get(p.id, ())
+            if r.meter_id is not None
+        ]
+        times = [p.taken_at for p in photos if p.taken_at is not None]
+        if times:
+            lo, hi = min(times) - NEIGHBOUR_WINDOW, max(times) + NEIGHBOUR_WINDOW
+            in_window = (Photo.review_status == "confirmed", Photo.taken_at >= lo, Photo.taken_at <= hi)
+            self.items.extend(
+                (t, mid)
+                for t, mid in db.execute(select(Photo.taken_at, Photo.meter_id).where(*in_window))
+                if mid is not None
+            )
+            self.items.extend(db.execute(select(Photo.taken_at, Reading.meter_id).join(Reading).where(*in_window)))
+
+    def around(self, t: datetime | None) -> list[int]:
+        if t is None:
+            return []
+        near = sorted((abs(x - t), mid) for x, mid in self.items if abs(x - t) <= NEIGHBOUR_WINDOW)
+        return list(dict.fromkeys(mid for _, mid in near))
+
+
+def build_cards(
+    db: Session, *, keys: Iterable[str] | None = None, photo_id: int | None = None, limit: int | None = None
+) -> list[Card]:
+    """Cards for unreviewed photos (``group_photos``) in walk order: by the time of the card's first photo,
+    photos without a date last. ``keys`` / ``photo_id`` select cards by key / by a photo they hold."""
+    photos = _queue_photos(db)
     hc = HintCache(db)
+    readouts = _all_readouts(hc, photos)
+    wanted = set(keys) if keys is not None else None
+    neighbours: _Neighbours | None = None
     cards: list[Card] = []
-    for key, group in groups.items():
+    for key, group in group_photos(photos, readouts):
         if wanted is not None and key not in wanted:
             continue
-        cards.append(_card(db, hc, key, group))
+        if photo_id is not None and all(p.id != photo_id for p in group):
+            continue
+        if neighbours is None:
+            neighbours = _Neighbours(db, photos, readouts)
+        cards.append(_card(db, hc, key, group, readouts, neighbours))
         if limit is not None and len(cards) >= limit:
             break
     return cards
 
 
-def _card(db: Session, hc: HintCache, key: str, group: list[Photo]) -> Card:
+def _card(
+    db: Session,
+    hc: HintCache,
+    key: str,
+    group: list[Photo],
+    readouts: Mapping[int, Sequence[MeterReadout]],
+    neighbours: _Neighbours,
+) -> Card:
     at = next((p.taken_at for p in group if p.taken_at), None)
     hints = hc.at(at)
     pairs: list[tuple[Photo, MeterReadout]] = []
     for p in group:
-        pairs.extend((p, r) for r in _photo_readouts(hc, p, hints, at))
-    _suggest_unidentified(pairs, hints)
+        for r in readouts.get(p.id, ()):
+            _suggest_unidentified(r, neighbours.around(p.taken_at), hints)
+            pairs.append((p, r))
     rows = _rows_for(hc, db, pairs, at)
     suggested = next((s for p in group if (s := suggest_from_filename(p.original_filename))), None)
     reported_by = next((p.reported_by for p in group if p.reported_by), "")

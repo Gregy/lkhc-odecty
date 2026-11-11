@@ -3,7 +3,7 @@
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', path='css/capture.css') }}">{% endblock %}
 {% block content %}
 {% call ui.page_header('Fotka #' ~ photo.id, photo.original_filename) %}
-  {% if photo.review_status == 'new' %}<a class="btn btn-primary" href="/odecty/kontrola#karta-{{ photo.series_id or ('p' ~ photo.id) }}">Do kontroly</a>{% endif %}
+  {% if photo.review_status == 'new' %}<a class="btn btn-primary" href="/odecty/kontrola{% if card_key %}#karta-{{ card_key }}{% endif %}">Do kontroly</a>{% endif %}
   <a class="btn" href="/fotky/{{ photo.id }}/soubor" target="_blank" rel="noopener">Originál</a>
 {% endcall %}
 <div class="photo-detail">
@@ -72,10 +72,10 @@
       {% else %}<p class="muted">Žádné.</p>{% endif %}
     </section>
 
-    {% if series|length > 1 %}
+    {% if same_meter|length > 1 %}
     <section class="card">
-      <h2>Série</h2>
-      <div class="thumb-grid small-thumbs">{% for s in series %}<a href="/fotky/{{ s.id }}" class="thumb{% if s.id == photo.id %} current{% endif %}"><img src="/fotky/{{ s.id }}/nahled" alt="#{{ s.id }}" loading="lazy"><span class="small">#{{ s.id }} {{ s.taken_at.strftime('%H:%M:%S') if s.taken_at }}</span></a>{% endfor %}</div>
+      <h2>Další fotky téhož elektroměru z tohoto dne</h2>
+      <div class="thumb-grid small-thumbs">{% for s in same_meter %}<a href="/fotky/{{ s.id }}" class="thumb{% if s.id == photo.id %} current{% endif %}"><img src="/fotky/{{ s.id }}/nahled" alt="#{{ s.id }}" loading="lazy"><span class="small">#{{ s.id }} {{ s.taken_at.strftime('%H:%M:%S') if s.taken_at }}</span></a>{% endfor %}</div>
     </section>
     {% endif %}
 

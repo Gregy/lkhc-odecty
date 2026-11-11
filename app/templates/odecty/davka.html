@@ -12,8 +12,8 @@
   <div class="field">
     <label for="f-files">Fotky <span class="req" aria-hidden="true">*</span></label>
     <input id="f-files" type="file" name="files" accept="image/jpeg,image/png,image/webp" multiple required>
-    <p class="field-help">JPEG/PNG/WebP, max {{ max_mb }} MB na fotku. Lze vybrat celou obchůzku najednou; fotky stejného elektroměru
-      pořízené do minuty po sobě se sloučí do série.</p>
+    <p class="field-help">JPEG/PNG/WebP, max {{ max_mb }} MB na fotku. Lze vybrat celou obchůzku najednou; po rozpoznání se fotky téhož
+      elektroměru z jednoho dne sloučí do jedné karty kontroly.</p>
   </div>
   {{ ui.field('reported_by', 'Nahlásil (nájemce)', '', help='Vyplňte u fotek, které poslal nájemce (např. „Novák (WhatsApp)“). Fotky bez EXIF času si v kontrole vyžádají datum.') }}
   <div class="rc-actions"><button class="btn btn-primary" type="submit">Nahrát</button></div>

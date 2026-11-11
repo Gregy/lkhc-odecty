@@ -1,7 +1,7 @@
 """Matching recognised meters to known meters (SPEC §5 "Párování").
 
-Order: exact serial -> Levenshtein <= 2 -> expected-value proximity -> (series neighbours /
-walk point, done by the review grouping) -> unassigned. A confidently read serial that is
+Order: exact serial -> Levenshtein <= 2 -> expected-value proximity (or the walk point) ->
+unassigned (the review ranks suggestions, see ``app.capture.review``). A confidently read serial that is
 unknown is *not* matched by values: it is reported as an unknown meter (new meter / replacement).
 """
 

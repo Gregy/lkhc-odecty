@@ -1,4 +1,4 @@
-"""Review queue: series merge, conflicts, required dates, acknowledgements, bulk confirm, new meters."""
+"""Review queue: cards by recognised meter, conflicts, required dates, acknowledgements, bulk confirm, new meters."""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ NEW_SERIAL = "91827364"  # not in the DB
 PARA = {"serial": SER, "registers": [{"digits_seen": f"0{NEW}", "value": NEW}]}
 
 
-def test_series_is_merged_into_one_proposal_and_bulk_confirmed(fapp: FastAPI, admin: TestClient) -> None:
+def test_photos_of_one_meter_form_one_card_and_bulk_confirmed(fapp: FastAPI, admin: TestClient) -> None:
     a = shoot(fapp, admin, answer(PARA), at=T0)
     b = shoot(
         fapp, admin, answer({"serial": None, "registers": [{"digits_seen": f"0{NEW}"}]}), at=T0 + timedelta(seconds=5)
@@ -113,11 +113,12 @@ def test_series_is_merged_into_one_proposal_and_bulk_confirmed(fapp: FastAPI, ad
     c = shoot(fapp, admin, answer(readable=False, problems=["glare"]), at=T0 + timedelta(seconds=9))
     other = shoot(fapp, admin, None, at=T0 + timedelta(minutes=5))
     q.process_pending(fapp)
-    with fapp.state.sessionmaker() as db:
-        sids = {p.id: p.series_id for p in db.scalars(select(Photo))}
-    assert sids[a] == sids[b] == sids[c] == f"s{a}" and sids[other] is None
     cs = cards(fapp)
-    card = next(x for x in cs if x.key == f"s{a}")
+    # the serial shot and the close-up whose value fits only this meter share a card; the unreadable
+    # photo taken between them is not glued to it by time - it is its own card
+    assert [x.photo_ids for x in cs] == [[a, b], [c], [other]]
+    card = cs[0]
+    assert card.key == f"m{meter_id(fapp, SER)}_20260701" and [x.key for x in cs[1:]] == [f"p{c}", f"p{other}"]
     assert len(card.rows) == 1
     row = card.rows[0]
     assert row.meter.serial == SER and row.values == {"T1": str(NEW)} and not row.conflicts
@@ -145,15 +146,15 @@ def test_series_is_merged_into_one_proposal_and_bulk_confirmed(fapp: FastAPI, ad
     assert new.photo_id == a and new.created_by_id is not None
     assert count(fapp) == BASE + 1  # the empty card ("other") was skipped
     with fapp.state.sessionmaker() as db:
-        assert {p.review_status for p in db.scalars(select(Photo).where(Photo.id.in_([a, b, c])))} == {"confirmed"}
-        assert db.get(Photo, other).review_status == "new"
+        assert {p.review_status for p in db.scalars(select(Photo).where(Photo.id.in_([a, b])))} == {"confirmed"}
+        assert db.get(Photo, other).review_status == db.get(Photo, c).review_status == "new"
         audit = db.scalars(
             select(AuditLog).where(AuditLog.entity_type == "readings", AuditLog.entity_id == new.id)
         ).one()
         assert audit.action == "create"
 
 
-def test_conflict_in_series_is_flagged_and_needs_a_choice(fapp: FastAPI, admin: TestClient) -> None:
+def test_conflict_in_meter_card_is_flagged_and_needs_a_choice(fapp: FastAPI, admin: TestClient) -> None:
     a = shoot(fapp, admin, answer(PARA), at=T0)
     shoot(
         fapp,
@@ -378,7 +379,7 @@ def test_stale_card_is_not_confirmed(fapp: FastAPI, admin: TestClient) -> None:
     q.process_pending(fapp)
     (card,) = cards(fapp)
     assert len(card.photo_ids) == 2
-    shoot(fapp, admin, answer(PARA), at=T0 + timedelta(seconds=6))  # joins the series meanwhile
+    shoot(fapp, admin, answer(PARA), at=T0 + timedelta(hours=3))  # same meter, same day: joins the card meanwhile
     q.process_pending(fapp)
     r = post_card(admin, card, {card.rows[0].key: {"meter": card.rows[0].meter.meter_id, "T1": str(NEW)}})
     assert r.status_code == 409 and count(fapp) == BASE

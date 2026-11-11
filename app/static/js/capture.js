@@ -102,6 +102,17 @@
     }
   });
 
+  // --- review: a polling card whose photo got recognised comes back as the card of its meter (cards
+  // are grouped by recognised meter); drop an older copy of that card still on the page - its photo
+  // set is stale (confirming it would be refused with 409 anyway).
+  document.addEventListener("htmx:load", function (e) {
+    const el = e.target;
+    if (!el || !el.classList || !el.classList.contains("review-card") || !el.id) return;
+    document.querySelectorAll(".review-card").forEach(function (other) {
+      if (other !== el && other.id === el.id) other.remove();
+    });
+  });
+
   // --- readings grid: keyboard activation and reload when a new row appears -----------------
   document.addEventListener("keydown", function (e) {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches("td.editable")) {

@@ -270,7 +270,15 @@ The module docstring describes how to add an integration. No implementation/sche
   cell against it); `imported_corrected_db` has the corrections applied.
 - `python -m app.tools.move_reading_date --from D --to D [--dry-run]` – moves all readings and the point skips of a
   day (snapshot first, audited, refuses on conflicts with the target day).
-- Photo review (`app/capture/review.py`): photos within 60 s form a *display* group only. A readout is tied to
+- Photo review (`app/capture/review.py`): cards are formed after extraction by `group_photos` (render time,
+  never by time proximity): a strongly identified readout (`exact`/`walk`/`manual`) links its photo to
+  (meter, day), so a card is a connected component over shared meters on one day (a multi-meter photo joins
+  its meters' cards); a photo with only weak matches (`values`/`fuzzy`) joins a card only when unambiguous
+  and weak links never merge two cards; undated photos, photos still being extracted and photos without an
+  identified meter are single-photo cards. Keys: `m<lowest meter id>_<YYYYMMDD>` / `p<photo id>`; order =
+  first photo's time. `build_cards(db, keys=…, photo_id=…)`, `card_key_for_photo(db, photo_id)`. Unassigned
+  readouts get ranked suggestions from meters identified in photos within `NEIGHBOUR_WINDOW` (2 min, also
+  confirmed photos) – suggestions only. `Photo.series_id` is unused. A readout is tied to
   a meter by its own evidence (`exact`/`fuzzy` serial, `walk` point, `manual`, or `values` = fits exactly one
   active meter); without it the row is unassigned with ranked `candidate_meter_ids`. `Row.strongly_identified`
   = some photo of the row is `exact`/`walk`/`manual`; bulk confirm requires it for every row. A walk photo whose

@@ -4,7 +4,7 @@
 - ``extractors``: ``none``, ``fake``, ``openai_compat`` (+ ``make_extractor(settings)``)
 - ``prompt``: prompt text and robust parsing of model answers
 - ``images``: upload validation, EXIF time, orientation, downscaling, file-name date suggestions
-- ``hints``: hints from the DB; ``matching``: serial / fuzzy / value matching; ``series``: time grouping
+- ``hints``: hints from the DB; ``matching``: serial / fuzzy / value matching
 - ``queue``: persistent background queue (Photo.extraction_status)
 - ``eval``: offline CLI ``python -m app.extraction.eval <dir|zip>``
 """

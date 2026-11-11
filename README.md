@@ -7,7 +7,11 @@ Nahrazuje Google Sheet `Odečty elektřiny.xlsx`:
   zadat / potvrdit stav. Nebo nahrát **dávku fotek** z galerie (`/odecty/davka`, datum z EXIF),
   případně fotky **sdílet z WhatsAppu** (stavy od nájemců).
 - **Rozpoznání stavů z fotek** vision modelem (OpenRouter nebo lokální Ollama / llama.cpp) –
-  nic se nezapíše bez potvrzení člověkem ve **frontě kontroly** (`/odecty/kontrola`).
+  nic se nezapíše bez potvrzení člověkem ve **frontě kontroly** (`/odecty/kontrola`). Karty kontroly se
+  skládají až podle rozpoznaných elektroměrů: jedna karta = fotky téhož elektroměru (nebo elektroměrů
+  vyfocených společně na jedné fotce) z jednoho dne, seřazené podle času obchůzky; fotka bez rozpoznaného
+  elektroměru je samostatná karta s návrhy z fotek pořízených těsně před/po. Čas pořízení fotky nikdy
+  nespojuje různé elektroměry.
 - **Přehledy**: spotřeba po nájemcích a měřicích místech v zarovnaných kalendářních měsících
   (stav na hranici je skutečný odečet, nebo dopočtený z okolních odečtů; hodnoty interpolované mezi dvěma
   odečty se neoznačují, značkou **≈** je vyznačen jen *předběžný* extrapolovaný odhad za posledním

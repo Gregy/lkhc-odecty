@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, time, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app import audit
 from app.capture.photos import resolve_path
-from app.capture.review import METHOD_LABELS, photo_problems
+from app.capture.review import METHOD_LABELS, card_key_for_photo, photo_problems
 from app.deps import AdminUser, DbSession, require_user
 from app.extraction import queue as extraction_queue
 from app.extraction.hints import meter_hint_list
@@ -74,6 +75,27 @@ def fotky(request: Request, db: DbSession, stav: str = "vse", strana: int = 1):
     )
 
 
+def _same_meter_photos(db: DbSession, photo: Photo, meter_ids: set[int]) -> list[Photo]:
+    """Photos (not discarded) of the same meter(s) taken the same day - assigned to it, or with a reading of it."""
+    if photo.taken_at is None or not meter_ids:
+        return []
+    start = datetime.combine(photo.taken_at.date(), time.min)
+    end = start + timedelta(days=1)
+    with_reading = select(Reading.photo_id).where(Reading.meter_id.in_(meter_ids), Reading.photo_id.is_not(None))
+    return list(
+        db.scalars(
+            select(Photo)
+            .where(
+                Photo.taken_at >= start,
+                Photo.taken_at < end,
+                Photo.review_status != "discarded",
+                or_(Photo.meter_id.in_(meter_ids), Photo.id.in_(with_reading)),
+            )
+            .order_by(Photo.taken_at, Photo.id)
+        )
+    )
+
+
 @router.get("/{photo_id}", name="fotka")
 def fotka(request: Request, photo_id: int, db: DbSession):
     photo = _photo_or_404(db, photo_id)
@@ -86,11 +108,10 @@ def fotka(request: Request, photo_id: int, db: DbSession):
     readings = list(
         db.scalars(select(Reading).where(Reading.photo_id == photo.id).order_by(Reading.meter_id, Reading.register))
     )
-    series = []
-    if photo.series_id:
-        series = list(
-            db.scalars(select(Photo).where(Photo.series_id == photo.series_id).order_by(Photo.taken_at, Photo.id))
-        )
+    meter_ids = {photo.meter_id} | {r.meter_id for r in readings}
+    if matched is not None:
+        meter_ids |= {m.meter_id for m in matched.meters}
+    same_meter = _same_meter_photos(db, photo, {mid for mid in meter_ids if mid is not None})
     meters = {m.id: m for m in db.scalars(select(Meter))}
     raw_json = json.dumps(photo.extraction_result, ensure_ascii=False, indent=2) if photo.extraction_result else ""
     return templates.TemplateResponse(
@@ -102,7 +123,8 @@ def fotka(request: Request, photo_id: int, db: DbSession):
             "photo": photo,
             "matched": matched,
             "readings": readings,
-            "series": series,
+            "same_meter": same_meter,
+            "card_key": card_key_for_photo(db, photo.id) if photo.review_status == "new" else None,
             "meters": meters,
             "raw_json": raw_json,
             "problems": photo_problems(photo),

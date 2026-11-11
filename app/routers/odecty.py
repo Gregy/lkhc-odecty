@@ -443,7 +443,6 @@ def upload_result(sr_photo: Photo, created: bool) -> dict[str, Any]:
         "created": created,
         "taken_at": sr_photo.taken_at.isoformat() if sr_photo.taken_at else None,
         "exif": sr_photo.exif_taken_at is not None,
-        "series_id": sr_photo.series_id,
         "extraction_status": sr_photo.extraction_status,
         "url": f"/fotky/{sr_photo.id}",
     }
@@ -547,6 +546,10 @@ def _render_card(request: Request, db: DbSession, card: Card, status_code: int =
 @router.get("/kontrola/karta/{key}", name="odecty_karta")
 def karta(request: Request, key: str, db: DbSession, user: CurrentUser):
     cards = build_cards(db, keys=[key])
+    if not cards and key.startswith("p") and key[1:].isdigit():
+        # a polling card of a photo whose extraction finished: the photo now belongs to the card of its
+        # meter - render that one in its place (capture.js drops an older copy of the same card)
+        cards = build_cards(db, photo_id=int(key[1:]))
     if not cards:
         return Response("", status_code=200)
     return _render_card(request, db, cards[0])

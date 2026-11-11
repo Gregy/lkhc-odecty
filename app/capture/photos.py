@@ -22,7 +22,6 @@ from sqlalchemy.orm import Session
 from app import audit
 from app.config import Settings
 from app.extraction.images import MAX_UPLOAD_BYTES, ImageRejected, inspect_image, thumbnail_jpeg
-from app.extraction.series import regroup_series
 from app.models import Meter, Photo, User
 
 log = logging.getLogger(__name__)
@@ -165,7 +164,6 @@ def store_photo(
     db.add(photo)
     db.flush()
     audit.record(db, user, "upload", "photos", photo.id, {"source": source, "filename": photo.original_filename})
-    regroup_series(db, taken_at)
     return StoreResult(photo, True)
 
 

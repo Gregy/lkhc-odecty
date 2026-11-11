@@ -194,7 +194,9 @@ class Photo(TimestampMixin, Base):
     extraction_error: Mapped[str | None] = mapped_column(Text)
     extracted_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    # Photos taken within ~60 s of each other form a series (same group key).
+    # Unused: formerly the time series (photos within ~60 s) that formed a review card. Review cards are
+    # now grouped by recognised meter and day at render time (app.capture.review.group_photos); the column
+    # stays in the schema (old values are ignored).
     series_id: Mapped[str | None] = mapped_column(String(64), index=True)
     # Primary matched meter (after recognition or manual assignment) and how it was matched.
     # A photo may show several meters: readings link back via Reading.photo_id.
